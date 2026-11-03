@@ -63,7 +63,7 @@ for (const repository of repositories) {
   assert.equal(fromSource.lanes[2].primary.protocol ?? fromSource.lanes[2].protocol, 'openai-responses',
     `${repository} GPT-6 Luna must be asked over Responses on both providers`);
   assert.equal(fromSource.lanes[2].primary.max_output_tokens, 65536);
-  assert.deepEqual(fromSource.lanes.map((lane) => lane.first_pass?.id ?? null), [null, onAnthropic ? 'claude-sonnet-5-5' : null, onAnthropic ? 'gpt-6.1-terra' : null],
+  assert.deepEqual(fromSource.lanes.map((lane) => lane.first_pass?.id ?? null), [null, onAnthropic ? 'claude-sonnet-5-5' : null, onAnthropic ? 'gpt-6.1-sol' : null],
     `${repository} only NebulaLab's Lanes B/C have first passes`);
   // Lane C's unserved resend was dropped: each lane is one request on its own provider, then one on the other.
   assert.ok(fromSource.lanes.every((lane) => lane.resend_unserved === undefined), `${repository} no lane resends on the same provider`);
@@ -178,9 +178,9 @@ const inputTokenRoom = {
   // GPT-6 Luna: a 1M-token window (recorded 2026-10-19). Command Code and Go use the same id, so this
   // one entry bounds both routes; it is counted together with its output, the conservative reading.
   'gpt-6-luna': 1000000,
-  'gpt-6.1-terra': 1000000,
+  'gpt-6.1-sol': 1000000,
 };
-const sharesWindowWithOutput = new Set(['kimi-k2.7-code', 'claude-haiku-5-5', 'claude-sonnet-5-5', 'tencent/hy3-paid', 'z-ai/glm-5.3-flash', 'moonshotai/Kimi-K2.7-Code', 'gpt-6-luna', 'gpt-6.1-terra']);
+const sharesWindowWithOutput = new Set(['kimi-k2.7-code', 'claude-haiku-5-5', 'claude-sonnet-5-5', 'tencent/hy3-paid', 'z-ai/glm-5.3-flash', 'moonshotai/Kimi-K2.7-Code', 'gpt-6-luna', 'gpt-6.1-sol']);
 for (const repository of repositories) {
   const config = source.loadConfig(repository, actionPath);
   const policy = config.review_policy;
@@ -218,9 +218,9 @@ assert.equal(nebula.lanes[0].provider, 'opencode-go');
 assert.equal(nebula.lanes[1].provider, 'anthropic');
 assert.equal(nebula.lanes[2].provider, 'openai');
 assert.deepEqual(nebula.lanes[2].credential_providers, ['openai', 'command-code']);
-assert.equal(nebula.lanes[2].first_pass.id, 'gpt-6.1-terra');
+assert.equal(nebula.lanes[2].first_pass.id, 'gpt-6.1-sol');
 assert.equal(nebula.lanes[2].first_pass.reasoning_effort, 'high');
-assert.equal(nebula.lanes[2].primary.reasoning_effort, 'medium');
+assert.equal(nebula.lanes[2].primary.reasoning_effort, 'xhigh');
 assert.deepEqual(nebula.lanes.map((lane) => lane.protocol), ['openai-responses', 'anthropic-messages', 'openai-responses']);
 assert.deepEqual(nebula.lanes.map((lane) => lane.primary.id), ['muse-spark-1.3-contributor', 'claude-haiku-5-5', 'gpt-6-luna']);
 assert.equal(nebula.lanes[0].primary.context_profile, 'full');
