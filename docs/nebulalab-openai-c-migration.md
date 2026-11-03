@@ -1,7 +1,7 @@
 # NebulaLab Lane C migration
 
-Only `TshyGO/NebulaLab` opts into provider bundles. Other repository configurations
-and their plain secrets keep the previous behavior.
+NebulaLab's C runs on OpenAI first. Since 2026-11-03 the other six repositories also use
+provider bundles, for a last resort only (see the end of this page).
 
 | Lane | First pass | Regular review | Same-model cross-provider route |
 | --- | --- | --- | --- |
@@ -18,9 +18,9 @@ repeat an already completed first pass.
 
 As of 2026-11-03, Peter has chosen Sol high for the first pass and Luna xhigh for
 subsequent reviews. The planned OpenAI allowance is $200 per month, with unused
-credits expiring. This policy remains limited to NebulaLab; extending OpenAI to
-other repositories is a separate future decision based on actual usage. The
-allowance is planning context, not a new runtime spending limit. Historical
+credits expiring. On 2026-11-03 Peter extended the same Sol/Luna rule to the other
+repositories as their Lane C last resort, sharing this allowance. The allowance is
+planning context, not a new runtime spending limit. Historical
 Terra/medium acceptance records under `docs/validation/nebulalab-openai-c/` remain
 unchanged and do not validate the upgraded model settings.
 
@@ -73,3 +73,37 @@ Contract tests cover legacy slots, provider pairing, fail-closed parsing, maskin
 first-pass persistence, one Luna fallback, and unchanged A/B routes. Actual-runner
 acceptance must use the production SDK and proxy and obtain real final output from
 both OpenAI models and CC. Injected failures prove routing, not a real provider outage.
+
+## Other repositories' last resort (2026-11-03)
+
+License-Service, resume, Thesis, Docs, Plugins and ci-central keep Go and Command Code
+first. Only when a lane's own route and its `cross_provider` route both report a spent
+quota does `last_resort` send the review to a paid API in the lane's own slot:
+
+| Lane | Last resort |
+| --- | --- |
+| A | None |
+| B | Claude Haiku 5.5 on Anthropic, the two NebulaLab accounts split 2:1 |
+| C | Sol high as a PR's first pass on a full round, otherwise Luna xhigh, on OpenAI |
+
+Both slots become bundles; A stays plain:
+
+`PR_AGENT_LANE_B_KEY` / `PR_AGENT_LANE_B_API_BASE`:
+```json
+{"schema_version":1,"providers":{"opencode-go":"<Go key>","anthropic":"<key 1>
+<key 2>"}}
+{"schema_version":1,"providers":{"opencode-go":"https://opencode.ai/zen/go/v1","anthropic":"https://api.anthropic.com/v1"}}
+```
+
+`PR_AGENT_LANE_C_KEY` / `PR_AGENT_LANE_C_API_BASE`:
+```json
+{"schema_version":1,"providers":{"command-code":"<CC key>","openai":"<OpenAI key>"}}
+{"schema_version":1,"providers":{"command-code":"<CC HTTPS base>","openai":"https://api.openai.com/v1"}}
+```
+
+The cutover order is the one above, per repository: write both bundle pairs, then merge
+the caller re-pin whose own review verifies them. A runner pinned before this change
+rejects a bundle in these slots, and the new one rejects a plain value, so each
+repository changes slots and pin together. GitHub-hosted callers reach both APIs
+directly; License-Service runs self-hosted, so Anthropic keeps the Taiwan path and
+OpenAI the approved review proxy.

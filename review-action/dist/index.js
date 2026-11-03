@@ -6,6 +6,9 @@ const path = require('node:path');
 const ALLOWED_PROTOCOLS = new Set(['openai-chat-completions', 'openai-responses', 'anthropic-messages', 'google-generate-content']);
 const ANTHROPIC_EFFORTS = new Set(['low', 'medium', 'high', 'xhigh', 'max']);
 const ALLOWED_LANES = new Set(['A', 'B', 'C']);
+const BUNDLE_PROVIDERS = new Set(['openai', 'command-code', 'opencode-go', 'anthropic']);
+// The paid APIs a lane may keep as its last resort behind the two plan providers.
+const LAST_RESORT_PROVIDERS = new Set(['anthropic', 'openai']);
 
 function configFileName(repository) {
   const parts = (repository || '').split('/');
@@ -82,6 +85,72 @@ function validateCrossProvider(config, lane, model, protocol, location) {
   }
 }
 
+function validateModelOptions(config, lane, model, location) {
+  const protocol = model.protocol ?? lane.protocol;
+  if (model.reasoning_effort !== undefined && (protocol !== 'openai-responses'
+    || !['none', 'low', 'medium', 'high', 'xhigh', 'max'].includes(model.reasoning_effort))) {
+    throw new Error(`${location}.reasoning_effort requires openai-responses and a supported effort.`);
+  }
+  if (model.omit_max_tokens && protocol !== 'openai-chat-completions') {
+    throw new Error(`${location}.omit_max_tokens is only supported by openai-chat-completions.`);
+  }
+  if (model.effort !== undefined) {
+    if (protocol !== 'anthropic-messages') throw new Error(`${location}.effort is only supported by anthropic-messages.`);
+    if (!ANTHROPIC_EFFORTS.has(model.effort)) throw new Error(`${location}.effort is not supported.`);
+  }
+  // Claude models with adaptive thinking reject non-default sampling values.
+  if (model.temperature !== undefined && protocol === 'anthropic-messages') {
+    throw new Error(`${location}.temperature is not supported by anthropic-messages.`);
+  }
+  // The quota-only overflow became cross_provider; a stale config must not lose it silently.
+  if (model.quota_overflow !== undefined) {
+    throw new Error(`${location}.quota_overflow was replaced by cross_provider.`);
+  }
+  if (model.cross_provider !== undefined) validateCrossProvider(config, lane, model, protocol, location);
+  if (model.thinking_level === undefined) return;
+  if (protocol !== 'google-generate-content') {
+    throw new Error(`${location}.thinking_level is only supported by google-generate-content.`);
+  }
+  if (!['minimal', 'low', 'medium', 'high'].includes(model.thinking_level)) {
+    throw new Error(`${location}.thinking_level is not supported.`);
+  }
+}
+
+// A lane's last resort (the owner's decision, 2026-11-03): a paid API behind the two plan
+// providers, asked only when the primary's own provider and its cross-provider route both report
+// a spent quota. It uses the lane's own fixed slot, as the second provider of its bundle, and may
+// lead with a first pass on a PR that has none. Its models never cross again.
+function validateLastResort(config, lane, location) {
+  const last = lane.last_resort;
+  if (!last || typeof last !== 'object' || Array.isArray(last)
+    || Object.keys(last).some((key) => !['provider', 'key_weights', 'first_pass', 'primary'].includes(key))) {
+    throw new Error(`${location}.last_resort must be an object with provider and primary, optionally key_weights and first_pass.`);
+  }
+  if (!LAST_RESORT_PROVIDERS.has(last.provider) || last.provider === lane.provider
+    || !lane.credential_providers?.includes(last.provider)) {
+    throw new Error(`${location}.last_resort.provider must be anthropic or openai, configured as the second provider of the lane's own slot.`);
+  }
+  const cross = lane.primary.cross_provider;
+  const crossProvider = cross && (cross.credential_provider ?? config.lanes.find((candidate) => candidate?.id === cross.credential_lane)?.provider);
+  if (!crossProvider || crossProvider === last.provider) {
+    throw new Error(`${location}.last_resort needs a primary cross_provider route on another plan provider; it serves only when both are spent.`);
+  }
+  if (last.key_weights !== undefined && (!Array.isArray(last.key_weights) || last.key_weights.length < 2 || last.key_weights.length > 4
+    || last.key_weights.some((weight) => !Number.isInteger(weight) || weight < 1 || weight > 100))) {
+    throw new Error(`${location}.last_resort.key_weights must be an array of 2 to 4 integers from 1 to 100.`);
+  }
+  const entries = [[last.primary, `${location}.last_resort.primary`],
+    ...(last.first_pass === undefined ? [] : [[last.first_pass, `${location}.last_resort.first_pass`]])];
+  for (const [model, modelLocation] of entries) {
+    validateModel(model, modelLocation);
+    if (model.cross_provider !== undefined) throw new Error(`${modelLocation} cannot configure cross_provider; the last resort never crosses.`);
+    validateModelOptions(config, lane, model, modelLocation);
+  }
+  if (last.first_pass !== undefined && last.first_pass.id === last.primary.id) {
+    throw new Error(`${location}.last_resort.first_pass must name a model other than its primary.`);
+  }
+}
+
 function validateConfig(config, repository) {
   if (!config || typeof config !== 'object' || Array.isArray(config)) {
     throw new Error('Repository config must be a JSON object.');
@@ -124,9 +193,9 @@ function validateConfig(config, repository) {
     if (lane.credential_providers !== undefined
       && (!Array.isArray(lane.credential_providers) || lane.credential_providers.length !== 2
         || new Set(lane.credential_providers).size !== 2
-        || lane.credential_providers.some((provider) => !['openai', 'command-code'].includes(provider))
+        || lane.credential_providers.some((provider) => !BUNDLE_PROVIDERS.has(provider))
         || !lane.credential_providers.includes(lane.provider) || lane.key_weights !== undefined)) {
-      throw new Error(`${location}.credential_providers must contain openai and command-code, include the lane provider, and cannot use key_weights.`);
+      throw new Error(`${location}.credential_providers must name two of openai, command-code, opencode-go and anthropic, include the lane provider, and cannot use key_weights.`);
     }
     if (lane.advisory !== undefined && typeof lane.advisory !== 'boolean') throw new Error(`${location}.advisory must be a boolean.`);
     if (lane.resend_unserved !== undefined && typeof lane.resend_unserved !== 'boolean') {
@@ -164,40 +233,12 @@ function validateConfig(config, repository) {
       }
       modelEntries.unshift([lane.first_pass, `${location}.first_pass`]);
     }
-    for (const [model, modelLocation] of modelEntries) {
-      const protocol = model.protocol ?? lane.protocol;
-      if (model.reasoning_effort !== undefined && (protocol !== 'openai-responses'
-        || !['none', 'low', 'medium', 'high', 'xhigh', 'max'].includes(model.reasoning_effort))) {
-        throw new Error(`${modelLocation}.reasoning_effort requires openai-responses and a supported effort.`);
-      }
-      if (model.omit_max_tokens && protocol !== 'openai-chat-completions') {
-        throw new Error(`${modelLocation}.omit_max_tokens is only supported by openai-chat-completions.`);
-      }
-      if (model.effort !== undefined) {
-        if (protocol !== 'anthropic-messages') throw new Error(`${modelLocation}.effort is only supported by anthropic-messages.`);
-        if (!ANTHROPIC_EFFORTS.has(model.effort)) throw new Error(`${modelLocation}.effort is not supported.`);
-      }
-      // Claude models with adaptive thinking reject non-default sampling values.
-      if (model.temperature !== undefined && protocol === 'anthropic-messages') {
-        throw new Error(`${modelLocation}.temperature is not supported by anthropic-messages.`);
-      }
-      // The quota-only overflow became cross_provider; a stale config must not lose it silently.
-      if (model.quota_overflow !== undefined) {
-        throw new Error(`${modelLocation}.quota_overflow was replaced by cross_provider.`);
-      }
-      if (model.cross_provider !== undefined) validateCrossProvider(config, lane, model, protocol, modelLocation);
-      if (model.thinking_level === undefined) continue;
-      if (protocol !== 'google-generate-content') {
-        throw new Error(`${modelLocation}.thinking_level is only supported by google-generate-content.`);
-      }
-      if (!['minimal', 'low', 'medium', 'high'].includes(model.thinking_level)) {
-        throw new Error(`${modelLocation}.thinking_level is not supported.`);
-      }
-    }
+    for (const [model, modelLocation] of modelEntries) validateModelOptions(config, lane, model, modelLocation);
     const ids = modelEntries.map(([model]) => model.id);
     if (new Set(ids).size !== ids.length) {
       throw new Error(`Lane ${lane.id} contains a duplicate first-pass/primary/fallback model id.`);
     }
+    if (lane.last_resort !== undefined) validateLastResort(config, lane, location);
   }
   // Advisory lanes never gate a review, so a config where every lane is advisory has no
   // enforcement left at all. Reject it here rather than let it degrade silently.

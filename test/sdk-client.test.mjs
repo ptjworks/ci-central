@@ -674,6 +674,8 @@ for (const [name, implementation] of [
     ['a 402 billing_error', 402, { type: 'billing_error', message: 'PRIVATE BILLING DETAIL' }, true],
     ['a 400 low credit balance', 400, { type: 'invalid_request_error', message: 'Your credit balance is too low to access the Anthropic API. PRIVATE' }, true],
     ['an ordinary 400', 400, { type: 'invalid_request_error', message: 'PRIVATE max_tokens: too large' }, false],
+    // Command Code, once its credits ran out, on every model and protocol (2026-11-03).
+    ['a 400 insufficient credits', 400, { type: 'invalid_request_error', message: 'You have insufficient credits to make this request. PRIVATE' }, true],
   ]) {
     test(`${name}: Anthropic Messages ${label} ${exhausted ? 'is' : 'is not'} reported as an exhausted credit, without its text`, async (t) => {
       const f = await fixture(t, implementation, async (_req, res) => {
@@ -686,6 +688,16 @@ for (const [name, implementation] of [
       assert.equal(f.calls.length, 1);
     });
   }
+  test(`${name}: Responses insufficient credits are reported as exhausted credit, without their text`, async (t) => {
+    const f = await fixture(t, implementation, async (_req, res) => {
+      res.writeHead(400, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: { message: 'You have insufficient credits to make this request. PRIVATE', type: 'invalid_request_error', code: 'BAD_REQUEST' } }));
+    });
+    await assert.rejects(f.invoke({ protocol: 'openai-responses' }),
+      (rejected) => rejected.status === 400 && rejected.creditExhausted === true && rejected.providerCode === 'BAD_REQUEST'
+        && !rejected.message.includes('PRIVATE') && !rejected.message.includes('insufficient'));
+    assert.equal(f.calls.length, 1);
+  });
   test(`${name}: Anthropic Messages keeps the message_start input count when message_delta reports zero`, async (t) => {
     const f = await fixture(t, implementation, async (_req, res) => {
       res.writeHead(200, { 'content-type': 'text/event-stream' });

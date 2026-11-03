@@ -532,9 +532,12 @@ return async function requestChatCompletion({ apiKey, baseURL, payload, signal, 
     sanitized.providerCode = safeCode(providerError?.code) || code;
     sanitized.providerType = safeCode(providerError?.type);
     // Only a boolean leaves: Anthropic reports an exhausted credit balance as 402 billing_error,
-    // or as a 400 whose message says the credit balance is too low.
+    // or as a 400 whose message says the credit balance is too low; Command Code as a 400 "You have
+    // insufficient credits to make this request" (seen on every protocol, 2026-11-03).
+    const providerMessage = typeof providerError?.message === 'string' ? providerError.message : '';
     sanitized.creditExhausted = sanitized.status === 402 || providerError?.type === 'billing_error'
-      || /credit balance is too low/i.test(typeof providerError?.message === 'string' ? providerError.message : '');
+      || /credit balance is too low/i.test(providerMessage)
+      || (sanitized.status === 400 && /\binsufficient credits\b/i.test(providerMessage));
     // The Anthropic SDK keeps the whole error body, where Go adds the plan metadata.
     const quota = planQuota(error, providerError, error.error, peekedLimitName);
     sanitized.quotaExhausted = quota.exhausted;
