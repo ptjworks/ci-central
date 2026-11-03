@@ -331,7 +331,17 @@ const repositoryConfig = (name) => JSON.parse(fs.readFileSync(path.join(here, '.
 // NebulaLab's own config (Lane B on Anthropic with a Sonnet first pass) has its own checks below.
 // The shared policy checks keep the Go Lane B every other repository still uses.
 const nebulaConfig = repositoryConfig('NebulaLab');
-const centralConfig = { ...structuredClone(nebulaConfig), lanes: repositoryConfig('NebulaGraph-License-Service').lanes };
+// The other repositories' lanes on plain slots, as they ran before their last resorts (2026-11-03).
+// The shared policy checks run on these; the bundled slots and last resorts have their own checks below.
+const licenseConfig = repositoryConfig('NebulaGraph-License-Service');
+const plainSlots = (lanes) => lanes.map((source) => {
+  const lane = structuredClone(source);
+  delete lane.credential_providers;
+  delete lane.last_resort;
+  delete lane.primary.cross_provider?.credential_provider;
+  return lane;
+});
+const centralConfig = { ...structuredClone(nebulaConfig), lanes: plainSlots(licenseConfig.lanes) };
 // Exercise the previously deployed NebulaLab policy as well as the new bundled-slot policy.
 const legacyNebulaConfig = { ...structuredClone(nebulaConfig), lanes: centralConfig.lanes.map((lane) => structuredClone(lane.id === 'B' ? nebulaConfig.lanes[1] : lane)) };
 delete legacyNebulaConfig.lanes[1].primary.cross_provider.credential_provider;
@@ -1891,10 +1901,16 @@ check('NebulaLab: an oversized first pass is trimmed but keeps its mark', !r.err
   && laneBBody(r).includes(firstPassMark(headSha)) && laneBBody(r).includes('<!-- /ai-pr-review-first-pass:v1 -->')
   && laneBBody(r).includes('已截断'));
 
-// Anthropic is refused off the Taiwan egress before anything is sent; Haiku then crosses to
-// Command Code, which is not the Anthropic API, so the lane still reviews.
+// A GitHub-hosted runner is on GitHub's own network and connects to Anthropic directly (the owner,
+// 2026-11-03); the Taiwan-node rule is for traffic leaving our own machines.
+r = await scenario(healthy, { ...twEgress, RUNNER_ENVIRONMENT: 'github-hosted' });
+check('NebulaLab: a GitHub-hosted runner sends Anthropic requests directly', !r.error
+  && laneBCalls(r) === 'claude-sonnet-5-5' && r.captured.find(({ lane }) => lane === 'B').proxy === undefined
+  && r.logs.some((line) => line.includes('[Lane B/claude-sonnet-5-5] egress=github-hosted-direct'))
+  && laneBBody(r).includes('status=valid'));
+// From a self-hosted runner Anthropic is refused off the Taiwan egress before anything is sent; Haiku
+// then crosses to Command Code, which is not the Anthropic API, so the lane still reviews.
 for (const [label, overrides] of [
-  ['a GitHub-hosted runner', { RUNNER_ENVIRONMENT: 'github-hosted' }],
   ['the VPS proxy', { NEBULA_REVIEW_PROXY_URL: 'http://177.201.224.95:13128' }],
   ['a self-hosted runner without a review proxy', { NEBULA_REVIEW_PROXY_URL: undefined }],
 ]) {
@@ -2401,5 +2417,114 @@ r = await scenario((call) => call.url.startsWith('https://lane-c.openai.') ? rep
 check('spent OpenAI account indices never change the CC profile PR-number key', !r.error
   && laneCCalls(r).filter((call) => call.url.startsWith('https://lane-c.cc.')).length === 1
   && laneCCalls(r).find((call) => call.url.startsWith('https://lane-c.cc.')).headers.authorization === 'Bearer cc-one');
+
+
+// The other repositories' last resort (the owner's decision, 2026-11-03). Only when the lane's own
+// plan and its cross route's plan both report a spent quota does Lane B ask Haiku 5.5 on the
+// Anthropic API and Lane C ask OpenAI (Sol for a PR's first pass, Luna after), through the second
+// provider of the lane's own slot. Lane A has none.
+const lastResortEnv = {
+  PR_REVIEW_CONFIG: JSON.stringify({ ...structuredClone(nebulaConfig), lanes: structuredClone(licenseConfig.lanes) }),
+  LANE_B_KEY: providerBundle({ 'opencode-go': 'go-b-key', anthropic: 'anthropic-key-1\nanthropic-key-2' }),
+  LANE_B_API_BASE: providerBundle({ 'opencode-go': 'https://lane-b.go.example.test/v1', anthropic: 'https://lane-b.anthropic.example.test/v1' }),
+  LANE_C_KEY: providerBundle({ 'command-code': 'cc-test-key', openai: 'openai-test-key' }),
+  LANE_C_API_BASE: providerBundle({ 'command-code': 'https://lane-c.cc.example.test/v1', openai: 'https://lane-c.openai.example.test/v1' }),
+};
+const goSpent = () => reply(429, '{"error":{"type":"GoUsageLimitError","message":"Weekly usage limit reached."}}');
+// Command Code's reply to every model and protocol once its credits ran out (2026-11-03).
+const ccSpent = () => reply(400, '{"error":{"message":"You have insufficient credits to make this request. Please purchase more credits to continue using the service.","type":"invalid_request_error","code":"BAD_REQUEST"}}');
+const onGo = (call) => call.url.startsWith('https://lane-a.') || call.url.startsWith('https://lane-b.go.');
+const onCc = (call) => call.url.startsWith('https://lane-c.cc.');
+const onPaidApi = (call) => call.url.startsWith('https://lane-b.anthropic.') || call.url.startsWith('https://lane-c.openai.');
+const bothSpent = (call) => onGo(call) ? goSpent() : onCc(call) ? ccSpent() : healthy(call);
+// A call belongs to a lane by its model, since cross routes use another lane's endpoint.
+const modelLane = (call) => call.model.includes('muse') ? 'A' : call.model.startsWith('claude-') ? 'B' : 'C';
+const routeOf = (call) => `${call.model}@${call.url.split('/')[2].split('.').slice(0, 2).join('.')}`;
+const laneRoutes = (result, laneId) => result.captured.filter((call) => modelLane(call) === laneId).map(routeOf).join(',');
+const lastLaneComment = (result, laneId) => result.posted.filter((body) => body.startsWith(`<!-- ai-pr-review-bot:lane-${laneId} -->`)).at(-1) || '';
+const paidLeak = (result) => [...result.posted, ...result.statusUpdates, ...result.logs].some((text) => /anthropic-key-|openai-test-key|cc-test-key|go-b-key/.test(text));
+
+r = await scenario(healthy, lastResortEnv);
+check('last resort: a healthy round never reaches the Anthropic or OpenAI APIs', !r.error && !r.captured.some(onPaidApi)
+  && laneRoutes(r, 'B') === 'claude-haiku-5-5@lane-b.go' && laneRoutes(r, 'C') === 'gpt-6-luna@lane-c.cc'
+  && r.captured.find((call) => onGo(call) && call.model === 'claude-haiku-5-5').headers['x-api-key'] === 'go-b-key');
+
+r = await scenario(bothSpent, lastResortEnv);
+const resortB = r.captured.find((call) => call.url.startsWith('https://lane-b.anthropic.'));
+const resortC = r.captured.find((call) => call.url.startsWith('https://lane-c.openai.'));
+const resortBBody = lastLaneComment(r, 'B');
+const resortCBody = lastLaneComment(r, 'C');
+check('last resort: with Go and Command Code both spent, Lane B asks Haiku once on Anthropic, directly from GitHub', !r.error
+  && laneRoutes(r, 'B') === 'claude-haiku-5-5@lane-b.go,claude-haiku-5-5@lane-c.cc,claude-haiku-5-5@lane-b.anthropic'
+  && resortB.url === 'https://lane-b.anthropic.example.test/v1/messages' && resortB.headers['x-api-key'] === 'anthropic-key-1'
+  && resortB.proxy === undefined && resortBBody.includes('status=valid')
+  && resortBBody.includes('via anthropic (last resort: plan quotas spent) · key 1/2')
+  && resortBBody.includes('两家套餐额度都已用完') && resortBBody.includes('opencode-go') && resortBBody.includes('command-code API 余额已用完'));
+check('last resort: Lane C asks GPT-6.1 Sol at high on OpenAI as the PR\'s first pass', !r.error
+  && laneRoutes(r, 'C') === 'gpt-6-luna@lane-c.cc,gpt-6-luna@lane-a.example,gpt-6.1-sol@lane-c.openai'
+  && resortC.url === 'https://lane-c.openai.example.test/v1/responses' && resortC.headers.authorization === 'Bearer openai-test-key'
+  && resortC.body.reasoning?.effort === 'high' && resortC.proxy === undefined
+  && resortCBody.includes('<!-- ai-pr-review-first-pass:v1 lane=C') && resortCBody.includes('model=gpt-6.1-sol') && resortCBody.includes('status=valid'));
+check('last resort: Lane A has none, and the two last resorts make the quorum', !r.error
+  && laneRoutes(r, 'A') === 'muse-spark-1.3-contributor@lane-a.example,meta/muse-spark-1.3-contributor@lane-c.cc'
+  && lastLaneComment(r, 'A').includes('status=diagnostic') && r.logs.some((line) => line.includes('Quorum gate: 2/3'))
+  && r.statusUpdates.some((body) => body.includes('两家套餐额度都已用完，最后兜底运行中')) && !paidLeak(r));
+check('Command Code\'s 400 "insufficient credits" is read as spent credits, not a request error', !r.error
+  && lastLaneComment(r, 'A').includes('额度用尽，不是限流') && lastLaneComment(r, 'A').includes('`command-code` 的 API 余额已用完'));
+
+r = await scenario(bothSpent, lastResortEnv, { useBundle: true, comments: [{ body: resortCBody }], ...commit(H2) });
+check('last resort: after a Sol first pass, Lane C asks GPT-6 Luna at xhigh and keeps the first pass folded', !r.error
+  && laneRoutes(r, 'C') === 'gpt-6-luna@lane-c.cc,gpt-6-luna@lane-a.example,gpt-6-luna@lane-c.openai'
+  && r.captured.find((call) => call.url.startsWith('https://lane-c.openai.')).body.reasoning?.effort === 'xhigh'
+  && lastLaneComment(r, 'C').includes('model=gpt-6.1-sol') && lastLaneComment(r, 'C').includes('首审 · GPT-6.1 Sol'));
+
+r = await scenario((call) => call.url.startsWith('https://lane-c.openai.') && call.model === 'gpt-6.1-sol' ? reply(503, 'unavailable') : bothSpent(call), lastResortEnv);
+check('last resort: a failed Sol first pass hands the same round to Luna and leaves no first-pass mark', !r.error
+  && laneRoutes(r, 'C') === 'gpt-6-luna@lane-c.cc,gpt-6-luna@lane-a.example,gpt-6.1-sol@lane-c.openai,gpt-6-luna@lane-c.openai'
+  && lastLaneComment(r, 'C').includes('status=valid') && !lastLaneComment(r, 'C').includes('ai-pr-review-first-pass:v1 lane=C'));
+
+for (const [label, route] of [
+  ['Go spent but Command Code down', (call) => onCc(call) ? reply(503, 'overloaded') : bothSpent(call)],
+  ['Go down but Command Code spent', (call) => onGo(call) ? reply(503, 'unavailable') : bothSpent(call)],
+  ['Go spent but Command Code refusing the key', (call) => onCc(call) ? reply(401, '{"error":{"code":"UNAUTHORIZED"}}') : bothSpent(call)],
+  ['Go spent and Command Code answering an ordinary 400', (call) => onCc(call) ? reply(400, '{"error":{"message":"Unsupported parameter","type":"invalid_request_error"}}') : bothSpent(call)],
+]) {
+  r = await scenario(route, lastResortEnv);
+  check(`last resort: ${label} never reaches the paid APIs`, !r.captured.some(onPaidApi)
+    && lastLaneComment(r, 'B').includes('status=diagnostic') && lastLaneComment(r, 'C').includes('status=diagnostic'));
+}
+
+r = await scenario((call) => call.url.startsWith('https://lane-b.anthropic.') && call.headers['x-api-key'] === 'anthropic-key-1'
+  ? reply(402, '{"type":"error","error":{"type":"billing_error","message":"insufficient credit"}}') : bothSpent(call), lastResortEnv);
+check('last resort: a spent Anthropic account hands Haiku to the other key of the slot', !r.error
+  && r.captured.filter((call) => call.url.startsWith('https://lane-b.anthropic.')).map(keyOf).join(',') === 'anthropic-key-1,anthropic-key-2'
+  && lastLaneComment(r, 'B').includes('status=valid') && lastLaneComment(r, 'B').includes('· key 2/2')
+  && lastLaneComment(r, 'B').includes('第 1 把 key 未能服务'));
+r = await scenario(bothSpent, lastResortEnv, prNumbered(44));
+check('last resort: PRs split 2:1 between the two Anthropic accounts by number', !r.error
+  && keyOf(r.captured.find((call) => call.url.startsWith('https://lane-b.anthropic.'))) === 'anthropic-key-2');
+
+r = await scenario(bothSpent, { ...lastResortEnv, RUNNER_ENVIRONMENT: 'self-hosted', NEBULA_REVIEW_PROXY_URL: 'http://192.168.122.1:17890' });
+check('last resort: a self-hosted runner sends Anthropic through the Taiwan egress and OpenAI through the review proxy', !r.error
+  && r.captured.filter(onPaidApi).length === 2 && r.captured.filter(onPaidApi).every((call) => call.proxy === 'http://192.168.122.1:17890')
+  && r.logs.some((line) => line.includes('[Lane B/claude-haiku-5-5] egress=tw-proxy')));
+r = await scenario(bothSpent, { ...lastResortEnv, RUNNER_ENVIRONMENT: 'self-hosted', NEBULA_REVIEW_PROXY_URL: 'http://177.201.224.95:13128' });
+check('last resort: a self-hosted runner off the Taiwan egress never sends Anthropic requests',
+  !r.captured.some((call) => call.url.startsWith('https://lane-b.anthropic.'))
+  && lastLaneComment(r, 'B').includes('status=diagnostic') && r.logs.some((line) => line.includes('only through the szlab Taiwan egress')));
+
+r = await scenario(bothSpent, { ...lastResortEnv, LANE_B_KEY: 'go-b-key', LANE_B_API_BASE: 'https://lane-b.go.example.test/v1' });
+check('last resort: a plain Lane B slot is refused as a whole before any request', !r.captured.some((call) => call.url.startsWith('https://lane-b.'))
+  && lastLaneComment(r, 'B').includes('credential format is invalid') && !paidLeak(r));
+
+// An incremental round is not a first pass: the last resort reviews it with Luna.
+r = await scenario(healthy, lastResortEnv, atHead(H1, { files: [srcFile(), testFile(), otherFile()] }));
+const resortRoundOne = ['A', 'B', 'C'].map((lane) => ({ body: laneComment(r, lane) }));
+r = await scenario(bothSpent, lastResortEnv, linearRound({ comments: resortRoundOne }));
+const incrementalResort = r.captured.find((call) => call.url.startsWith('https://lane-c.openai.'));
+check('last resort: an incremental round goes to Luna, not a Sol first pass', !r.error
+  && laneRoutes(r, 'C') === 'gpt-6-luna@lane-c.cc,gpt-6-luna@lane-a.example,gpt-6-luna@lane-c.openai'
+  && isIncremental(incrementalResort) && incrementalResort.body.reasoning?.effort === 'xhigh'
+  && !lastLaneComment(r, 'C').includes('ai-pr-review-first-pass:v1 lane=C'));
 
 if (checks.some((value) => !value)) process.exitCode = 1;
