@@ -86,12 +86,12 @@ quota does `last_resort` send the review to a paid API in the lane's own slot:
 | B | Claude Haiku 5.5 on Anthropic, the two NebulaLab accounts split 2:1 |
 | C | Sol high as a PR's first pass on a full round, otherwise Luna xhigh, on OpenAI |
 
-Both slots become bundles; A stays plain:
+Both slots become bundles; A stays plain. Generate them with a JSON serializer, never by
+hand: the two Anthropic keys are one string joined by an escaped `\n`.
 
 `PR_AGENT_LANE_B_KEY` / `PR_AGENT_LANE_B_API_BASE`:
 ```json
-{"schema_version":1,"providers":{"opencode-go":"<Go key>","anthropic":"<key 1>
-<key 2>"}}
+{"schema_version":1,"providers":{"opencode-go":"<Go key>","anthropic":"<key 1>\n<key 2>"}}
 {"schema_version":1,"providers":{"opencode-go":"https://opencode.ai/zen/go/v1","anthropic":"https://api.anthropic.com/v1"}}
 ```
 

@@ -135,15 +135,27 @@ function validateLastResort(config, lane, location) {
   if (!crossProvider || crossProvider === last.provider) {
     throw new Error(`${location}.last_resort needs a primary cross_provider route on another plan provider; it serves only when both are spent.`);
   }
+  // The gate reads the primary's own two routes, and only Go and Command Code are the plans it sits behind.
+  if ([lane.provider, crossProvider].sort().join(',') !== 'command-code,opencode-go') {
+    throw new Error(`${location}.last_resort serves only behind opencode-go and command-code: the primary and its cross_provider route must be those two plans.`);
+  }
+  if (lane.fallbacks.length || lane.first_pass !== undefined) {
+    throw new Error(`${location}.last_resort needs a lane without fallbacks or first_pass; its gate judges the primary's two routes alone.`);
+  }
   if (last.key_weights !== undefined && (!Array.isArray(last.key_weights) || last.key_weights.length < 2 || last.key_weights.length > 4
     || last.key_weights.some((weight) => !Number.isInteger(weight) || weight < 1 || weight > 100))) {
     throw new Error(`${location}.last_resort.key_weights must be an array of 2 to 4 integers from 1 to 100.`);
   }
   const entries = [[last.primary, `${location}.last_resort.primary`],
     ...(last.first_pass === undefined ? [] : [[last.first_pass, `${location}.last_resort.first_pass`]])];
+  // A model inherits the lane's protocol, which belongs to the plan provider; the paid API must speak its own.
+  const nativeProtocols = { anthropic: ['anthropic-messages'], openai: ['openai-responses', 'openai-chat-completions'] }[last.provider];
   for (const [model, modelLocation] of entries) {
     validateModel(model, modelLocation);
     if (model.cross_provider !== undefined) throw new Error(`${modelLocation} cannot configure cross_provider; the last resort never crosses.`);
+    if (!nativeProtocols.includes(model.protocol ?? lane.protocol)) {
+      throw new Error(`${modelLocation} must use a protocol ${last.provider} serves (${nativeProtocols.join(' or ')}); set protocol when the lane's differs.`);
+    }
     validateModelOptions(config, lane, model, modelLocation);
   }
   if (last.first_pass !== undefined && last.first_pass.id === last.primary.id) {

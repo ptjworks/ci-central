@@ -385,6 +385,11 @@ for (const loader of [source, bundled]) {
 const resume = source.loadConfig('ptjworks/resume-form-assistant-plugin', actionPath);
 for (const loader of [source, bundled]) {
   assert.doesNotThrow(() => loader.validateConfig(structuredClone(resume), 'ptjworks/resume-form-assistant-plugin'));
+  // An explicit protocol makes a model speak its paid API's protocol inside a lane of another.
+  const explicitProtocol = structuredClone(resume);
+  explicitProtocol.lanes[1].credential_providers = ['opencode-go', 'openai'];
+  explicitProtocol.lanes[1].last_resort = { provider: 'openai', primary: { id: 'gpt-6-luna', label: 'GPT-6 Luna', protocol: 'openai-responses', max_output_tokens: 65536 } };
+  assert.doesNotThrow(() => loader.validateConfig(explicitProtocol, 'ptjworks/resume-form-assistant-plugin'));
   for (const [mutate, message] of [
     [(config) => { config.lanes[1].last_resort.provider = 'command-code'; }, /last_resort\.provider must be anthropic or openai/],
     [(config) => { config.lanes[1].last_resort.provider = 'opencode-go'; }, /last_resort\.provider must be anthropic or openai/],
@@ -401,6 +406,16 @@ for (const loader of [source, bundled]) {
     [(config) => { config.lanes[1].last_resort.fallbacks = []; }, /last_resort must be an object with provider and primary/],
     [(config) => { config.lanes[1].last_resort = 'anthropic'; }, /last_resort must be an object with provider and primary/],
     [(config) => { config.lanes[1].key_weights = [2, 1]; }, /cannot use key_weights/],
+    // ci-central#86 review: the gate reads only the primary's two routes, and only behind the two plans.
+    [(config) => { config.lanes[1].fallbacks = [{ ...config.lanes[1].last_resort.primary, id: 'claude-haiku-4-5' }]; }, /needs a lane without fallbacks or first_pass/],
+    [(config) => { config.lanes[1].first_pass = { ...config.lanes[1].last_resort.primary, id: 'claude-sonnet-5-5' }; }, /needs a lane without fallbacks or first_pass/],
+    [(config) => {
+      config.lanes[1].credential_providers = ['opencode-go', 'anthropic'];
+      config.lanes[2].primary.cross_provider = { credential_lane: 'B', credential_provider: 'anthropic', id: 'gpt-6-luna' };
+    }, /serves only behind opencode-go and command-code/],
+    // ci-central#86 review: a last-resort model must speak its paid API's protocol, not the plan lane's.
+    [(config) => { config.lanes[1].credential_providers = ['opencode-go', 'openai']; config.lanes[1].last_resort.provider = 'openai'; delete config.lanes[1].last_resort.key_weights; }, /must use a protocol openai serves/],
+    [(config) => { config.lanes[2].credential_providers = ['command-code', 'anthropic']; config.lanes[2].last_resort.provider = 'anthropic'; }, /must use a protocol anthropic serves/],
   ]) {
     const config = structuredClone(resume);
     mutate(config);
