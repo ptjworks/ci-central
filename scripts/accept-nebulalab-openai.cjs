@@ -76,7 +76,7 @@ process.stdin.on('end', async () => {
       if (!c.includes(`head=${head} workflow=${workflow} status=valid`)) throw new Error('C evidence was not valid');
       const firstPass = c.includes('ai-pr-review-first-pass:v1 lane=C');
       const expected = verifyAB ? ['command-code:meta/muse-spark-1.3-contributor', 'command-code:claude-haiku-5-5']
-        : inject ? ['command-code:gpt-6-luna'] : [`openai:${prior.length ? 'gpt-6-luna' : 'gpt-6.1-terra'}`];
+        : inject ? ['command-code:gpt-6-luna'] : [`openai:${prior.length ? 'gpt-6-luna' : 'gpt-6.1-sol'}`];
       const actual = traces.filter((trace) => trace.real_request).map((trace) => `${trace.provider}:${trace.model}`).sort();
       if (JSON.stringify(actual) !== JSON.stringify(expected.sort())) throw new Error('Unexpected provider/model trace');
       if (verifyAB && laneComments.some((body) => !body.includes('status=valid'))) throw new Error('A/B evidence was not valid');
@@ -84,7 +84,7 @@ process.stdin.on('end', async () => {
       summaries.push({ case: name, valid: true, first_pass_preserved: verifyAB ? null : firstPass, synthetic_lanes: verifyAB ? ['C'] : ['A', 'B'], traces });
       return laneComments;
     }
-    const first = await round('Terra first pass / real OpenAI', 'b');
+    const first = await round('Sol first pass / real OpenAI', 'b');
     await round('Luna subsequent head / real OpenAI', 'c', first);
     await round('Luna injected OpenAI outage / real CC fallback', 'd', first, true);
     await round('A/B injected own-provider outages / real CC fallbacks', 'e', [], false, true);

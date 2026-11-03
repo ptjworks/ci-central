@@ -7,12 +7,22 @@ and their plain secrets keep the previous behavior.
 | --- | --- | --- | --- |
 | A | Muse Spark 1.3 Contributor on Go | Same | CC through C / command-code |
 | B | Sonnet 5.5 on Anthropic | Haiku 5.5 on Anthropic | Haiku through C / command-code |
-| C | GPT-6.1 Terra on OpenAI, high reasoning | GPT-6 Luna on OpenAI, medium reasoning | Luna through C / command-code |
+| C | GPT-6.1 Sol on OpenAI, high reasoning | GPT-6 Luna on OpenAI, xhigh reasoning | Luna through C / command-code |
 
 First-pass models never cross providers. Failure enters the regular model chain in
 the same round. Only a valid first pass records completion; otherwise the next push
 tries again. Success ends the lane's round, and its report stays folded in later comments.
-Existing PRs without a C first-pass marker receive Terra at their next review.
+Existing PRs without a C first-pass marker receive Sol at their next review. Existing
+Terra first-pass markers remain valid and stay folded; the model upgrade does not
+repeat an already completed first pass.
+
+As of 2026-11-03, Peter has chosen Sol high for the first pass and Luna xhigh for
+subsequent reviews. The planned OpenAI allowance is $200 per month, with unused
+credits expiring. This policy remains limited to NebulaLab; extending OpenAI to
+other repositories is a separate future decision based on actual usage. The
+allowance is planning context, not a new runtime spending limit. Historical
+Terra/medium acceptance records under `docs/validation/nebulalab-openai-c/` remain
+unchanged and do not validate the upgraded model settings.
 
 The 2-of-3 quorum, deadlines, diff budgets, and Anthropic 2:1 account selection stay
 unchanged. Self-hosted OpenAI calls use the approved review proxy. Anthropic retains
@@ -51,8 +61,8 @@ not write production secrets or pin callers to an unmerged central commit.
 3. Drain or migrate active/queued runs and open PR caller/merge refs before they can
    receive the new format. Coordinate the caller/secret cutover so no review starts
    between the two secret writes.
-4. Trigger a fresh event; rerunning an old run keeps its old pin. Verify actual Terra
-   first-pass evidence, Luna on the next head, correct provider labels and A/B CC routes.
+4. Trigger a fresh event; rerunning an old run keeps its old pin. Verify actual Sol high
+   first-pass evidence, Luna xhigh on the next head, correct provider labels and A/B CC routes.
 
 Retain original CC credentials in 1Password. Rollback must restore a compatible caller
 and the original plain C secret pair together. Never put values in files or logs.

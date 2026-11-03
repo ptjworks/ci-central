@@ -2354,26 +2354,27 @@ const openaiEgress = { ...twEgress, PR_REVIEW_CONFIG: JSON.stringify(nebulaConfi
 const laneCBody = (result) => result.posted.find((body) => body.startsWith('<!-- ai-pr-review-bot:lane-C -->')) || '';
 const laneCCalls = (result) => result.captured.filter((call) => call.lane === 'C');
 r = await scenario(healthy, openaiEgress, { useBundle: true });
-const terraFirst = laneCBody(r);
-check('NebulaLab C: Terra alone performs the first pass on OpenAI with high reasoning', !r.error
-  && laneCCalls(r).length === 1 && laneCCalls(r)[0].model === 'gpt-6.1-terra'
+const solFirst = laneCBody(r);
+check('NebulaLab C: Sol alone performs the first pass on OpenAI with high reasoning', !r.error
+  && laneCCalls(r).length === 1 && laneCCalls(r)[0].model === 'gpt-6.1-sol'
   && laneCCalls(r)[0].body.reasoning?.effort === 'high'
   && laneCCalls(r)[0].headers.authorization === 'Bearer openai-test-key'
-  && terraFirst.includes('ai-pr-review-first-pass:v1 lane=C') && terraFirst.includes('status=valid'));
-r = await scenario(healthy, openaiEgress, { useBundle: true, files: [patch('src/a.ts', 101), patch('tests/a.test.ts', 100)], comments: [{ body: terraFirst }], pulls: [{ ...pull, head: { ...pull.head, sha: H2 } }],
+  && solFirst.includes('ai-pr-review-first-pass:v1 lane=C') && solFirst.includes('status=valid'));
+r = await scenario(healthy, openaiEgress, { useBundle: true, files: [patch('src/a.ts', 101), patch('tests/a.test.ts', 100)], comments: [{ body: solFirst }], pulls: [{ ...pull, head: { ...pull.head, sha: H2 } }],
   context: { ...context, payload: { pull_request: { number: 42, head: { sha: H2 } } } } });
-check('NebulaLab C: subsequent heads use Luna on OpenAI and preserve the Terra first pass', !r.error
+check('NebulaLab C: subsequent heads use Luna on OpenAI and preserve the Sol first pass', !r.error
   && laneCCalls(r).map((call) => call.model).join(',') === 'gpt-6-luna'
-  && laneCCalls(r)[0].body.reasoning?.effort === 'medium' && laneCBody(r).includes('model=gpt-6.1-terra'));
+  && laneCCalls(r)[0].body.reasoning?.effort === 'xhigh' && laneCBody(r).includes('model=gpt-6.1-sol'));
 r = await scenario((call) => call.url.startsWith('https://lane-c.openai.') ? reply(503, 'unavailable') : healthy(call), openaiEgress);
-check('NebulaLab C: failed Terra proceeds to Luna, then exactly one same-model CC fallback', !r.error
-  && laneCCalls(r).map((call) => call.model).join(',') === 'gpt-6.1-terra,gpt-6-luna,gpt-6-luna'
+check('NebulaLab C: failed Sol proceeds to Luna, then exactly one same-model CC fallback', !r.error
+  && laneCCalls(r).map((call) => call.model).join(',') === 'gpt-6.1-sol,gpt-6-luna,gpt-6-luna'
   && laneCCalls(r).map((call) => call.headers.authorization).join(',') === 'Bearer openai-test-key,Bearer openai-test-key,Bearer cc-test-key'
+  && laneCCalls(r).slice(1).every((call) => call.body.reasoning?.effort === 'xhigh')
   && !laneCBody(r).includes('ai-pr-review-first-pass:v1 lane=C') && laneCBody(r).includes('via command-code'));
 r = await scenario((call) => call.lane !== 'C' ? reply(503, 'unavailable') : healthy(call), openaiEgress);
 check('NebulaLab: A and B still cross to CC, never to the OpenAI profile or the C model chain', !r.error
-  && r.captured.filter((call) => call.lane === 'C' && call.model !== 'gpt-6.1-terra').map((call) => call.model).sort().join(',') === 'claude-haiku-5-5,meta/muse-spark-1.3-contributor'
-  && r.captured.filter((call) => call.lane === 'C' && call.model !== 'gpt-6.1-terra').every((call) => call.headers.authorization === 'Bearer cc-test-key' || call.headers['x-api-key'] === 'cc-test-key'));
+  && r.captured.filter((call) => call.lane === 'C' && call.model !== 'gpt-6.1-sol').map((call) => call.model).sort().join(',') === 'claude-haiku-5-5,meta/muse-spark-1.3-contributor'
+  && r.captured.filter((call) => call.lane === 'C' && call.model !== 'gpt-6.1-sol').every((call) => call.headers.authorization === 'Bearer cc-test-key' || call.headers['x-api-key'] === 'cc-test-key'));
 r = await scenario(healthy, { ...openaiEgress, LANE_C_KEY: '{never-echo-this-secret' });
 check('NebulaLab: malformed C bundles disable C while A/B continue without exposing input', !r.error
   && r.captured.map((call) => call.lane).sort().join(',') === 'A,B'
