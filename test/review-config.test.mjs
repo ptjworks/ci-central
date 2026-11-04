@@ -52,18 +52,35 @@ for (const repository of repositories) {
   // model on the other provider: Lanes A/B on Command Code through the Lane C slot, Lane C on Go
   // through the Lane A slot. Command Code served Muse 1.3 and Haiku on 2026-10-15, and Go served
   // GPT-6 Luna on 2026-10-19 under the same id.
+  // Every Lane C slot is a bundle now, so the A/B cross routes name its Command Code profile.
   assert.deepEqual(fromSource.lanes.map((lane) => lane.primary.cross_provider), [
-    { credential_lane: 'C', id: 'meta/muse-spark-1.3-contributor', ...(onAnthropic ? { credential_provider: 'command-code' } : {}) },
-    { credential_lane: 'C', id: 'claude-haiku-5-5', ...(onAnthropic ? { credential_provider: 'command-code' } : {}) },
+    { credential_lane: 'C', id: 'meta/muse-spark-1.3-contributor', credential_provider: 'command-code' },
+    { credential_lane: 'C', id: 'claude-haiku-5-5', credential_provider: 'command-code' },
     onAnthropic ? { credential_lane: 'C', credential_provider: 'command-code', id: 'gpt-6-luna' } : { credential_lane: 'A', id: 'gpt-6-luna' },
   ], `${repository} each primary must name the same model on the other provider`);
+  // The owner's decision, 2026-11-03: with Command Code and OpenCode Go both spent, the other
+  // repositories fall back once more to paid APIs, and only then. Lane A has none. Lane B asks
+  // Haiku 5.5 alone on the Anthropic API (the two NebulaLab accounts, 2:1); Lane C asks OpenAI
+  // under NebulaLab's rule, GPT-6.1 Sol at high for a PR's first pass and GPT-6 Luna at xhigh after.
+  // NebulaLab already reviews on both APIs first and keeps no last resort.
+  assert.deepEqual(fromSource.lanes.map((lane) => lane.credential_providers ?? null), onAnthropic
+    ? [null, null, ['openai', 'command-code']]
+    : [null, ['opencode-go', 'anthropic'], ['command-code', 'openai']], `${repository} lane slot bundles changed`);
+  assert.deepEqual(fromSource.lanes.map((lane) => lane.last_resort ?? null), onAnthropic ? [null, null, null] : [null, {
+    provider: 'anthropic', key_weights: [2, 1], primary: { id: 'claude-haiku-5-5', label: 'Claude Haiku 5.5', request_timeout_ms: 900000,
+      context_profile: 'full', max_output_tokens: 120000, effort: 'high', diff_char_budget: 1200000 },
+  }, {
+    provider: 'openai',
+    first_pass: { id: 'gpt-6.1-sol', label: 'GPT-6.1 Sol', context_profile: 'full', max_output_tokens: 65536, reporting_calibration: true, reasoning_effort: 'high' },
+    primary: { id: 'gpt-6-luna', label: 'GPT-6 Luna', context_profile: 'full', max_output_tokens: 65536, reporting_calibration: true, reasoning_effort: 'xhigh' },
+  }], `${repository} last resorts changed`);
   assert.deepEqual(fromSource.lanes.map((lane) => lane.protocol), ['openai-responses', 'anthropic-messages', 'openai-responses']);
   // Go serves GPT-6 Luna only over Responses (Chat Completions returns 400 ModelProtocolUnsupported),
   // and the cross route reuses the model's protocol, so no model-level override may move it back.
   assert.equal(fromSource.lanes[2].primary.protocol ?? fromSource.lanes[2].protocol, 'openai-responses',
     `${repository} GPT-6 Luna must be asked over Responses on both providers`);
   assert.equal(fromSource.lanes[2].primary.max_output_tokens, 65536);
-  assert.deepEqual(fromSource.lanes.map((lane) => lane.first_pass?.id ?? null), [null, onAnthropic ? 'claude-sonnet-5-5' : null, onAnthropic ? 'gpt-6.1-terra' : null],
+  assert.deepEqual(fromSource.lanes.map((lane) => lane.first_pass?.id ?? null), [null, onAnthropic ? 'claude-sonnet-5-5' : null, onAnthropic ? 'gpt-6.1-sol' : null],
     `${repository} only NebulaLab's Lanes B/C have first passes`);
   // Lane C's unserved resend was dropped: each lane is one request on its own provider, then one on the other.
   assert.ok(fromSource.lanes.every((lane) => lane.resend_unserved === undefined), `${repository} no lane resends on the same provider`);
@@ -178,9 +195,9 @@ const inputTokenRoom = {
   // GPT-6 Luna: a 1M-token window (recorded 2026-10-19). Command Code and Go use the same id, so this
   // one entry bounds both routes; it is counted together with its output, the conservative reading.
   'gpt-6-luna': 1000000,
-  'gpt-6.1-terra': 1000000,
+  'gpt-6.1-sol': 1000000,
 };
-const sharesWindowWithOutput = new Set(['kimi-k2.7-code', 'claude-haiku-5-5', 'claude-sonnet-5-5', 'tencent/hy3-paid', 'z-ai/glm-5.3-flash', 'moonshotai/Kimi-K2.7-Code', 'gpt-6-luna', 'gpt-6.1-terra']);
+const sharesWindowWithOutput = new Set(['kimi-k2.7-code', 'claude-haiku-5-5', 'claude-sonnet-5-5', 'tencent/hy3-paid', 'z-ai/glm-5.3-flash', 'moonshotai/Kimi-K2.7-Code', 'gpt-6-luna', 'gpt-6.1-sol']);
 for (const repository of repositories) {
   const config = source.loadConfig(repository, actionPath);
   const policy = config.review_policy;
@@ -197,7 +214,8 @@ for (const repository of repositories) {
     `${repository} Lane A needs a longer window for 1M-token inputs`);
   const promptChars = policy.issue_char_budget + policy.description_char_limit + 40000;
   for (const lane of config.lanes) {
-    for (const model of [...(lane.first_pass ? [lane.first_pass] : []), lane.primary, ...lane.fallbacks]) {
+    for (const model of [...(lane.first_pass ? [lane.first_pass] : []), lane.primary, ...lane.fallbacks,
+      ...(lane.last_resort ? [lane.last_resort.first_pass, lane.last_resort.primary].filter(Boolean) : [])]) {
       const diffChars = model.diff_char_budget ?? policy.diff_char_budget;
       const sharedOutput = sharesWindowWithOutput.has(model.id) ? model.max_output_tokens : 0;
       assert.ok((diffChars + promptChars) / WORST_CHARS_PER_TOKEN + sharedOutput <= inputTokenRoom[model.id],
@@ -218,9 +236,9 @@ assert.equal(nebula.lanes[0].provider, 'opencode-go');
 assert.equal(nebula.lanes[1].provider, 'anthropic');
 assert.equal(nebula.lanes[2].provider, 'openai');
 assert.deepEqual(nebula.lanes[2].credential_providers, ['openai', 'command-code']);
-assert.equal(nebula.lanes[2].first_pass.id, 'gpt-6.1-terra');
+assert.equal(nebula.lanes[2].first_pass.id, 'gpt-6.1-sol');
 assert.equal(nebula.lanes[2].first_pass.reasoning_effort, 'high');
-assert.equal(nebula.lanes[2].primary.reasoning_effort, 'medium');
+assert.equal(nebula.lanes[2].primary.reasoning_effort, 'xhigh');
 assert.deepEqual(nebula.lanes.map((lane) => lane.protocol), ['openai-responses', 'anthropic-messages', 'openai-responses']);
 assert.deepEqual(nebula.lanes.map((lane) => lane.primary.id), ['muse-spark-1.3-contributor', 'claude-haiku-5-5', 'gpt-6-luna']);
 assert.equal(nebula.lanes[0].primary.context_profile, 'full');
@@ -360,6 +378,49 @@ for (const loader of [source, bundled]) {
   towardAnthropic.lanes[0].primary.cross_provider.credential_lane = 'B';
   delete towardAnthropic.lanes[0].primary.cross_provider.credential_provider;
   assert.doesNotThrow(() => loader.validateConfig(towardAnthropic, 'TshyGO/NebulaLab'));
+}
+
+// A last resort is a paid API in the lane's own slot, asked only behind two spent plans, so its
+// shape is strict and its models never cross again.
+const resume = source.loadConfig('ptjworks/resume-form-assistant-plugin', actionPath);
+for (const loader of [source, bundled]) {
+  assert.doesNotThrow(() => loader.validateConfig(structuredClone(resume), 'ptjworks/resume-form-assistant-plugin'));
+  // An explicit protocol makes a model speak its paid API's protocol inside a lane of another.
+  const explicitProtocol = structuredClone(resume);
+  explicitProtocol.lanes[1].credential_providers = ['opencode-go', 'openai'];
+  explicitProtocol.lanes[1].last_resort = { provider: 'openai', primary: { id: 'gpt-6-luna', label: 'GPT-6 Luna', protocol: 'openai-responses', max_output_tokens: 65536 } };
+  assert.doesNotThrow(() => loader.validateConfig(explicitProtocol, 'ptjworks/resume-form-assistant-plugin'));
+  for (const [mutate, message] of [
+    [(config) => { config.lanes[1].last_resort.provider = 'command-code'; }, /last_resort\.provider must be anthropic or openai/],
+    [(config) => { config.lanes[1].last_resort.provider = 'opencode-go'; }, /last_resort\.provider must be anthropic or openai/],
+    [(config) => { config.lanes[1].credential_providers = ['opencode-go', 'openai']; }, /last_resort\.provider must be anthropic or openai/],
+    [(config) => { delete config.lanes[1].credential_providers; }, /last_resort\.provider must be anthropic or openai/],
+    [(config) => { config.lanes[1].credential_providers = ['opencode-go', 'grok']; }, /credential_providers must name two of/],
+    [(config) => { delete config.lanes[1].primary.cross_provider; }, /needs a primary cross_provider route/],
+    [(config) => { config.lanes[1].last_resort.primary.cross_provider = { credential_lane: 'C', credential_provider: 'command-code', id: 'claude-haiku-5-5' }; }, /last resort never crosses/],
+    [(config) => { config.lanes[2].last_resort.first_pass.id = 'gpt-6-luna'; }, /first_pass must name a model other than its primary/],
+    [(config) => { config.lanes[2].last_resort.first_pass.effort = 'high'; }, /last_resort\.first_pass\.effort is only supported by anthropic-messages/],
+    [(config) => { config.lanes[1].last_resort.primary.reasoning_effort = 'high'; }, /last_resort\.primary\.reasoning_effort requires openai-responses/],
+    [(config) => { config.lanes[1].last_resort.primary.max_output_tokens = 0; }, /last_resort\.primary\.max_output_tokens must be a positive integer/],
+    [(config) => { config.lanes[1].last_resort.key_weights = [2]; }, /last_resort\.key_weights must be an array of 2 to 4 integers/],
+    [(config) => { config.lanes[1].last_resort.fallbacks = []; }, /last_resort must be an object with provider and primary/],
+    [(config) => { config.lanes[1].last_resort = 'anthropic'; }, /last_resort must be an object with provider and primary/],
+    [(config) => { config.lanes[1].key_weights = [2, 1]; }, /cannot use key_weights/],
+    // ci-central#86 review: the gate reads only the primary's two routes, and only behind the two plans.
+    [(config) => { config.lanes[1].fallbacks = [{ ...config.lanes[1].last_resort.primary, id: 'claude-haiku-4-5' }]; }, /needs a lane without fallbacks or first_pass/],
+    [(config) => { config.lanes[1].first_pass = { ...config.lanes[1].last_resort.primary, id: 'claude-sonnet-5-5' }; }, /needs a lane without fallbacks or first_pass/],
+    [(config) => {
+      config.lanes[1].credential_providers = ['opencode-go', 'anthropic'];
+      config.lanes[2].primary.cross_provider = { credential_lane: 'B', credential_provider: 'anthropic', id: 'gpt-6-luna' };
+    }, /serves only behind opencode-go and command-code/],
+    // ci-central#86 review: a last-resort model must speak its paid API's protocol, not the plan lane's.
+    [(config) => { config.lanes[1].credential_providers = ['opencode-go', 'openai']; config.lanes[1].last_resort.provider = 'openai'; delete config.lanes[1].last_resort.key_weights; }, /must use a protocol openai serves/],
+    [(config) => { config.lanes[2].credential_providers = ['command-code', 'anthropic']; config.lanes[2].last_resort.provider = 'anthropic'; }, /must use a protocol anthropic serves/],
+  ]) {
+    const config = structuredClone(resume);
+    mutate(config);
+    assert.throws(() => loader.validateConfig(config, 'ptjworks/resume-form-assistant-plugin'), message);
+  }
 }
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'review-config-'));
