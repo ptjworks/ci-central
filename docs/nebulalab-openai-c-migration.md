@@ -69,12 +69,23 @@ and the original plain C secret pair together. Never put values in files or logs
 
 ## Key rotation
 
-`scripts/set-lane-secret.ps1` writes plain keys only and refuses NebulaLab's C slot. When
-the Command Code key changes, update both sides: the plain C key on the other callers
-(pass them with `-Repositories`), and the `command-code` entry of NebulaLab's C key bundle,
-rewritten whole with the current OpenAI key from 1Password. Every Command Code request from a
-repository left on the old key gets 401: a plain caller's C crosses to Go with no sign in the
-comment status, and NebulaLab loses C's Luna fallback and the A/B cross routes.
+`scripts/set-lane-secret.ps1` writes one plain key. Before it asks for the key, it refuses
+every target whose lane has `credential_providers` (a bundle) or `key_weights` (one key per
+account), so since the 2026-11-03 last resort only Lane A is left to it. A key usually sits in
+more than one slot, and each of them has to change:
+
+| Key | Plain slots | Bundle entries |
+| --- | --- | --- |
+| OpenCode Go | Lane A, every repository (the script) | `opencode-go` in Lane B, every repository but NebulaLab |
+| Anthropic, two accounts | NebulaLab's Lane B, one key per line | `anthropic` in Lane B, every repository but NebulaLab |
+| Command Code | none | `command-code` in Lane C, every repository |
+| OpenAI | none | `openai` in Lane C, every repository |
+
+Rewrite a bundle whole, from the current 1Password values of both its providers, with a JSON
+serializer as in the examples in this document. A slot left on an old key gets 401 from that
+provider: the lane crosses to its other provider with no sign in the comment status, routes
+that cross into the slot lose their fallback, and a 401 is not a spent quota, so the last
+resort does not step in.
 
 ## Validation boundary
 

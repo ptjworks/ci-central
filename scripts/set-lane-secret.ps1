@@ -25,6 +25,7 @@ $baseName = "PR_AGENT_LANE_${Lane}_API_BASE"
 
 # Check every target before asking for the key. A lane with credential_providers keeps a
 # version-1 JSON bundle in its slots, and a plain key written there would disable the lane.
+# A lane with key_weights holds one key per account, and a single key would drop the others.
 # GitHub names are case-insensitive, so configs are matched that way; a target without one
 # has an unknown slot format and is refused as well.
 $configDirectory = [System.IO.Path]::Combine($PSScriptRoot, '..', 'review-action', 'config', 'repositories')
@@ -36,6 +37,7 @@ foreach ($file in Get-ChildItem -LiteralPath $configDirectory -Filter '*.json' -
     $configs[$file.BaseName.ToLowerInvariant()] = $file.FullName
 }
 $bundled = @()
+$multiKey = @()
 $unknown = @()
 foreach ($repository in $Repositories) {
     if ($repository -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') {
@@ -48,12 +50,16 @@ foreach ($repository in $Repositories) {
     }
     $laneConfig = (Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json).lanes | Where-Object id -eq $Lane
     if ($laneConfig -and $laneConfig.PSObject.Properties['credential_providers']) { $bundled += $repository }
+    elseif ($laneConfig -and $laneConfig.PSObject.Properties['key_weights']) { $multiKey += $repository }
 }
 if ($unknown) {
     throw "No central config in review-action/config/repositories for $($unknown -join ', '), so its Lane $Lane slot format is unknown. No secrets were written."
 }
 if ($bundled) {
     throw "Lane $Lane uses a version-1 provider credential bundle in $($bundled -join ', '). This script writes a plain key and would disable it. Leave those repositories out with -Repositories and update their bundle as docs/nebulalab-openai-c-migration.md describes. No secrets were written."
+}
+if ($multiKey) {
+    throw "Lane $Lane holds one key per account in $($multiKey -join ', ') (key_weights). This script writes a single key and would drop the other accounts. Leave those repositories out with -Repositories and rewrite the slot with every account's key, one per line. No secrets were written."
 }
 
 $secureKey = Read-Host "Enter the new Lane $Lane API key" -AsSecureString
