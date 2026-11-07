@@ -42,6 +42,8 @@ Lane A/B 使用 OpenCode Go（整个 workspace 共用一个 5 小时/每周/每�
 | B | Go Claude Haiku 5.5 | Command Code 上的 Haiku | Anthropic 官方 API 上的 Claude Haiku 5.5（只用 Haiku；两个账号按 PR 号 2:1 分摊，与 NebulaLab 共用） |
 | C | Command Code GPT-6 Luna | Go 上的 GPT-6 Luna | OpenAI：PR 还没有 Lane C 首审标记且本轮为完整审核时先由 GPT-6.1 Sol（high）首审，否则或 Sol 失败时 GPT-6 Luna（xhigh），与 NebulaLab 的 C 同一规则、共用 OpenAI 额度 |
 
+以上仓库的主路与同模型跨供应商路由使用 Muse `xhigh`、Haiku `high`、Luna `high`。最后兜底沿用表中的付费 API 策略。
+
 最后兜底用本 Lane 自己的固定槽位，槽位改为两家具名的 bundle（B：`opencode-go` + `anthropic`；C：`command-code` + `openai`），不新增 Secret 槽位；A/B 跨到 Command Code 时因此显式选 `credential_provider: "command-code"`。这些仓库跑在 GitHub 托管 runner 上，Anthropic 与 OpenAI 都直连；License-Service 在自托管 runner 上，Anthropic 仍只经台湾专用节点、OpenAI 经已批准的审核代理。成功时评论横幅写明两家各自用尽的额度，脚注写成 `Lane B: claude-haiku-5-5 via anthropic (last resort: plan quotas spent) · key 1/2`，状态表显示“两家套餐额度都已用完，最后兜底运行中”。NebulaLab 的 B/C 本来就以这两家付费 API 为主，不配最后兜底。
 
 ### 统一 SDK 接入

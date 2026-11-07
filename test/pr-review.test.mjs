@@ -801,6 +801,8 @@ check('healthy path never crosses to the other provider', r.captured.length === 
 const healthyLaneA = r.captured.find(({ lane }) => lane === 'A')?.body;
 const healthyLaneB = r.captured.find(({ lane }) => lane === 'B')?.body;
 const healthyLaneC = r.captured.find(({ lane }) => lane === 'C')?.body;
+check('non-NebulaLab Responses payloads ask Muse at xhigh and Luna at high',
+  healthyLaneA?.reasoning?.effort === 'xhigh' && healthyLaneC?.reasoning?.effort === 'high');
 const reviewPolicyPrefix = centralConfig.review_policy.system_prompt.split('Return concise Markdown')[0].trim();
 check('all active protocols receive the repository review prompt',
   [healthyLaneA, healthyLaneB, healthyLaneC].every((body) => systemText(body)?.includes(reviewPolicyPrefix))
@@ -1653,6 +1655,7 @@ const invalidThinkingConfig = structuredClone(centralConfig);
 invalidThinkingConfig.lanes[2].protocol = 'google-generate-content';
 delete invalidThinkingConfig.lanes[2].primary.omit_max_tokens;
 delete invalidThinkingConfig.lanes[2].primary.cross_provider;
+delete invalidThinkingConfig.lanes[2].primary.reasoning_effort;
 invalidThinkingConfig.lanes[2].primary.thinking_level = 'maximum';
 r = await scenario(healthy, { PR_REVIEW_CONFIG: JSON.stringify(invalidThinkingConfig) });
 check('workflow defense rejects an unsupported Google thinking level before model calls', /thinking_level is not supported/.test(r.error?.message || '') && r.captured.length === 0);

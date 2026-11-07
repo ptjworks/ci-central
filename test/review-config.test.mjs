@@ -86,6 +86,10 @@ for (const repository of repositories) {
   assert.ok(fromSource.lanes.every((lane) => lane.resend_unserved === undefined), `${repository} no lane resends on the same provider`);
   // Haiku at max effort spent all 65,536 output tokens thinking on three large NebulaLab PRs; high finished them.
   assert.equal(fromSource.lanes[1].primary.effort, 'high', `${repository} Haiku must stay at high effort`);
+  assert.equal(fromSource.lanes[0].primary.reasoning_effort, onAnthropic ? undefined : 'xhigh',
+    `${repository} Muse effort must follow its review policy`);
+  assert.equal(fromSource.lanes[2].primary.reasoning_effort, onAnthropic ? 'xhigh' : 'high',
+    `${repository} Luna effort must follow its review policy`);
   // Calibration took Muse and Hy3 from near-silent to 1-5 findings on large NebulaLab PRs with no
   // high-confidence clean-change noise; on Haiku it only added noise. GPT-6 Luna took over Lane C
   // with Hy3's setting and was measured with it on 2026-10-19.
