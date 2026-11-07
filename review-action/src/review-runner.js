@@ -653,7 +653,7 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
     : outcome.failureKind === 'authentication-failed' ? 'key 被拒绝' : '账号限流';
 
   // Where one request goes: the lane's own provider and fixed secret slot, or the model's
-  // cross-provider fallback (the same model through another lane's provider and slot), each with
+  // cross-provider fallback (the configured model through its provider and slot), each with
   // the slot key it uses.
   const ownRoute = (lane, model, keyIndex = startKey(lane.id)) => ({ provider: lane.provider, credentialLane: lane.id, modelId: model.id, keyIndex });
 
@@ -800,12 +800,9 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
 
   // A fallback on the same provider cannot help once that provider's quota is gone or the
   // provider is down. So when a model's own request yields no usable review, for any reason,
-  // a model with a cross_provider route sends the same request once to the same model through
-  // another lane's provider and fixed secret slot, with a full model window of its own. Only
-  // that one request crosses; the other lane's own models are never entered.
-  function crossRoute(lane, model) {
-    const cross = model.cross_provider;
-    if (!cross) return null;
+  // a model can try its configured cross-provider routes once each in order, through
+  // their fixed secret slots. The target lanes' own model chains are never entered.
+  function crossRoute(lane, model, cross) {
     const target = lanes.find((candidate) => candidate.id === cross.credential_lane);
     const provider = cross.credential_provider ?? target?.provider;
     const credentials = credentialsFor(cross.credential_lane, provider);
@@ -815,7 +812,7 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
     }
     // The target slot's PR-number key, never one its own lane skipped to: lanes run in parallel, so
     // that lane's spent keys would make the account depend on timing.
-    return { provider, credentialLane: target.id, modelId: cross.id, keyIndex: pickedKey(target.id, provider) };
+    return { provider, credentialLane: target.id, modelId: cross.id, label: cross.label, keyIndex: pickedKey(target.id, provider) };
   }
 
   // A complete report is checked against exactly what was supplied, its findings get the ids the
@@ -896,7 +893,7 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
   // Each model once on the lane's own provider. When the slot holds several keys and one fails for
   // an account reason, the same request goes once to each other key (separate accounts, so not a
   // retry of the same route). When that yields no usable review, for any reason, a model with a
-  // cross_provider route is asked once more there (crossRoute), and only then does the lane move
+  // cross_provider configuration tries its ordered routes, and only then does the lane move
   // to its next model.
   async function requestReview(lane) {
     const primary = lane.primary;
@@ -961,14 +958,14 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
       }
       let ownQuota = null;
       // The own route on the PR's key, then each other key after an account failure, then the cross route.
-      const steps = [{ crossing: false, key: stage.startKey() }];
+      const steps = [{ key: stage.startKey() }];
       const keysTried = new Set();
-      for (const { crossing, key, from } of steps) {
-        const via = crossing ? crossRoute(lane, model) : null;
-        if (crossing && !via) break;
+      for (const { cross, key, from } of steps) {
+        const via = cross ? crossRoute(lane, model, cross) : null;
+        if (cross && !via) continue;
         if (via) {
           console.log(`[Lane ${lane.id}/${model.id}] no usable review from ${lane.provider}; sending the same request once to ${via.modelId} on ${via.provider} through the Lane ${via.credentialLane} secret slot.`);
-          await statusPublisher.update(lane.id, 'cross', `${via.modelId} @ ${via.provider}`, ownQuota?.status);
+          await statusPublisher.update(lane.id, via.label ? 'cross_model' : 'cross', `${via.modelId} @ ${via.provider}`, ownQuota?.status);
         }
         if (from) await statusPublisher.update(lane.id, 'account', `${model.id} @ key ${key + 1}`);
         const route = via ?? stage.route(model, key);
@@ -1000,7 +997,7 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
         lastOutcome = '';
         const quotaNote = outcome.quota ? quotaWording(route.provider, outcome.quota) : null;
         if (quotaNote) quotaProviders.add(route.provider);
-        if (!crossing) ownQuota = quotaNote;
+        if (!cross) ownQuota = quotaNote;
         // A plan that stopped several models of the lane is named once, with its first reset time:
         // Go's reset is the request time plus retry-after, so two hits may differ by a second.
         const quotaKey = outcome.quota && `${route.provider}:${outcome.quota.credit ? 'credit' : outcome.quota.window ?? 'plan'}`;
@@ -1060,7 +1057,7 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
           ? `HTTP ${lastClosedStream.httpStatus}, stream closed before the model finished after ${lastClosedStream.seconds} s`
           : `HTTP ${response?.status ?? 'request failed'}${quotaNote ? `, ${quotaNote.tried}` : ''}`;
         tried.push(`${attemptLabel} -> ${lastFailureKind === 'report-invalid' ? `evidence contract rejected: ${lastReportError}` : lastOutcome || failed} (${attempts ?? 0} attempt(s))`);
-        if (crossing) continue;
+        if (cross) continue;
         if (stage.keyCount > 1 && accountFailure(outcome)) {
           // A rate limit passes; a spent credit or a refused key stays that way for this run.
           if (outcome.failureKind === 'quota-exhausted' || outcome.failureKind === 'authentication-failed') stage.spent.add(key);
@@ -1070,11 +1067,13 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
           if (next !== undefined) {
             const reason = accountReason(outcome, route.provider);
             console.log(`[Lane ${lane.id}/${model.id}] key ${key + 1} of ${stage.keyCount} could not serve (${outcome.failureKind || 'rate limited'}, HTTP ${outcome.httpStatus ?? 'none'}); sending the same request once with key ${next + 1} of the Lane ${lane.id} slot.`);
-            steps.push({ crossing: false, key: next, from: { index: key, reason } });
+            steps.push({ key: next, from: { index: key, reason } });
             continue;
           }
         }
-        if (stage.crosses) steps.push({ crossing: true });
+        if (stage.crosses && model.cross_provider) {
+          steps.push(...[].concat(model.cross_provider).map((route) => ({ cross: route })));
+        }
       }
       return null;
     }
@@ -1102,7 +1101,7 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
     // plan and its cross route's plan both reported a spent quota and nothing else failed. A PR that
     // has no first pass yet gets the last resort's first pass on a full review.
     const last = lane.last_resort;
-    const cross = primary.cross_provider;
+    const cross = last && primary.cross_provider;
     const crossProvider = cross && (cross.credential_provider ?? lanes.find((candidate) => candidate.id === cross.credential_lane)?.provider);
     if (last && !bestPartial && onlyQuota && quotaProviders.has(lane.provider) && quotaProviders.has(crossProvider)) {
       const lastCredentials = credentialsFor(lane.id, last.provider);
@@ -1220,19 +1219,23 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
     }
     const reviewedAt = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
     const { servedBy, servedVia, servedKey, review, reasoningLength, reasoningUnit, degraded, status, firstPass } = result;
+    const crossLabel = servedVia?.label;
+    const servedModelId = crossLabel ? servedVia.modelId : servedBy?.id;
     const keyText = servedKey ? ` · key ${servedKey.index + 1}/${servedKey.count}` : '';
     const viaText = servedVia?.lastResort ? ` via ${servedVia.provider} (last resort: plan quotas spent)${keyText}`
       : servedVia ? ` via ${servedVia.provider} ${servedVia.modelId} (${lane.provider} unavailable)` : keyText;
     // Only a valid first-pass review is marked; later reviews carry it, folded and unchanged.
     const isFirstPass = firstPass === true && status === 'valid';
     const prior = isFirstPass ? null : priorFirstPass(lane);
-    const modelLine = degraded
+    const modelLine = crossLabel
+      ? `Lane ${lane.id}: ${servedModelId} via ${servedVia.provider} (${servedBy.id} on ${lane.provider} unavailable)`
+      : degraded
       ? `Lane ${lane.id}: ${primary.id} unavailable -> served by ${servedBy.id}${viaText}`
       : `Lane ${lane.id}: ${servedBy?.id ?? primary.id}${isFirstPass ? ' (first pass)' : ''}${viaText}`;
     const banner = [
       ...(degraded ? [`> ℹ️ Lane ${lane.id} 的 \`${primary.label}\` 未产生可用审核，本条 review 由同通道备用模型 \`${servedBy.label}\` 生成。`] : []),
       ...(servedVia?.lastResort ? [`> ℹ️ Lane ${lane.id} 的两家套餐额度都已用完（${result.lastResortReason}），本条 review 由最后兜底 \`${servedBy.label}\` 经 \`${servedVia.provider}\`（Lane ${lane.id} 的固定 Secret 槽位）生成。`]
-        : servedVia ? [`> ℹ️ Lane ${lane.id} 的 \`${servedBy.label}\` 在 \`${lane.provider}\` 上未产生可用审核${result.ownQuota ? `（${result.ownQuota.banner}）` : ''}，本条 review 由同一模型经 \`${servedVia.provider}\`（Lane ${servedVia.credentialLane} 的固定 Secret 槽位）生成。`] : []),
+        : servedVia ? [`> ℹ️ Lane ${lane.id} 的 \`${servedBy.label}\` 在 \`${lane.provider}\` 上未产生可用审核${result.ownQuota ? `（${result.ownQuota.banner}）` : ''}，本条 review 由${crossLabel ? `兜底模型 \`${crossLabel}\` ` : '同一模型'}经 \`${servedVia.provider}\`（Lane ${servedVia.credentialLane} 的固定 Secret 槽位）生成。`] : []),
       ...(servedKey?.from ? [`> ℹ️ Lane ${lane.id} 的第 ${servedKey.from.index + 1} 把 key 未能服务（${servedKey.from.reason}），本条 review 由同一模型经同一 Secret 槽位的第 ${servedKey.index + 1} 把 key 生成。`] : []),
     ];
     if (isFirstPass) {
@@ -1248,13 +1251,14 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
     if (banner.length) banner.push('');
     // The record the next round compares against: this review when it is valid; otherwise the
     // last valid review, carried unchanged so a failed round does not lose it.
+    // The policy model id keeps its fallback's findings eligible for re-review.
     const record = status === 'valid' && result.record ? { v: 1, lane: lane.id, head: reviewHeadSha, workflow: workflowSha, base: pull.base.ref,
       prompt: PROMPT_VERSION, model: servedBy.id, mode: incrementalContexts.has(lane.id) ? 'incremental' : 'full', at: contextAt,
       fp: identity.fingerprint, files: identity.files, findings: result.record.findings, next: result.record.next,
       ...(result.record.lossy ? { lossy: true } : {}) }
       : laneRecords.get(lane.id)?.state ?? null;
     const recordLine = record ? [encodeState(record)] : [];
-    const servedLabel = servedBy && servedVia ? `${servedBy.id} via ${servedVia.provider}` : servedBy?.id;
+    const servedLabel = servedBy && servedVia ? `${servedModelId} via ${servedVia.provider}` : servedModelId;
     const priorLabel = prior && ([lane.first_pass, lane.last_resort?.first_pass].find((model) => model?.id === prior.model)?.label ?? prior.model);
     const carried = (content) => prior ? ['',
       `<details><summary>首审 · ${priorLabel} · 提交 ${prior.head.slice(0, 7)}</summary>`, '',
@@ -1265,7 +1269,7 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
       `<!-- ai-pr-review-bot:lane-${lane.id} -->`,
       `<!-- ai-pr-review-evidence:v2 lane=${lane.id} head=${reviewHeadSha} workflow=${workflowSha} status=${status} -->`,
       ...recordLine,
-      `## AI PR Review · Lane ${lane.id} · ${servedBy?.label ?? primary.label}${isFirstPass ? ' · 首审' : ''}${incremental ? ' · 增量' : ''}`,
+      `## AI PR Review · Lane ${lane.id} · ${crossLabel ?? servedBy?.label ?? primary.label}${isFirstPass ? ' · 首审' : ''}${incremental ? ' · 增量' : ''}`,
       '',
       `> 审核提交：\`${reviewedHeadShortSha}\` · 更新时间：\`${reviewedAt}\` · 此评论会随 PR 新提交原地更新 · [Run](${runUrl})`,
       '',

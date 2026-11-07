@@ -58,28 +58,31 @@ var require_index = __commonJS({
         throw new Error(`${location}.protocol is not supported.`);
       }
     }
-    function validateCrossProvider(config, lane, model, protocol, location) {
-      const cross = model.cross_provider;
-      if (!cross || typeof cross !== "object" || Array.isArray(cross) || Object.keys(cross).some((key) => !["credential_lane", "credential_provider", "id"].includes(key))) {
-        throw new Error(`${location}.cross_provider must be an object with only credential_lane and id, optionally credential_provider.`);
+    function validateCrossProvider(config, lane, cross, protocol, location) {
+      if (!cross || typeof cross !== "object" || Array.isArray(cross) || Object.keys(cross).some((key) => !["credential_lane", "credential_provider", "id", "label"].includes(key))) {
+        throw new Error(`${location} must be an object with only credential_lane and id, optionally credential_provider and label.`);
       }
       if (typeof cross.id !== "string" || !cross.id.trim()) {
-        throw new Error(`${location}.cross_provider.id must be a non-empty string.`);
+        throw new Error(`${location}.id must be a non-empty string.`);
+      }
+      if (cross.label !== void 0 && (typeof cross.label !== "string" || !cross.label.trim())) {
+        throw new Error(`${location}.label must be a non-empty string.`);
       }
       const target = config.lanes.find((candidate) => candidate?.id === cross.credential_lane);
       if (!target || cross.credential_lane === lane.id && cross.credential_provider === void 0) {
-        throw new Error(`${location}.cross_provider.credential_lane must name another configured lane.`);
+        throw new Error(`${location}.credential_lane must name another configured lane.`);
       }
       const provider = cross.credential_provider ?? target.provider;
       if (cross.credential_provider !== void 0 && !target.credential_providers?.includes(cross.credential_provider)) {
-        throw new Error(`${location}.cross_provider.credential_provider must name a configured provider in the target slot.`);
+        throw new Error(`${location}.credential_provider must name a configured provider in the target slot.`);
       }
       if (typeof provider !== "string" || provider === lane.provider) {
-        throw new Error(`${location}.cross_provider must use a provider other than the lane's own.`);
+        throw new Error(`${location} must use a provider other than the lane's own.`);
       }
       if (protocol === "google-generate-content") {
-        throw new Error(`${location}.cross_provider is not supported by google-generate-content.`);
+        throw new Error(`${location} is not supported by google-generate-content.`);
       }
+      return provider;
     }
     function validateModelOptions(config, lane, model, location) {
       const protocol = model.protocol ?? lane.protocol;
@@ -99,7 +102,13 @@ var require_index = __commonJS({
       if (model.quota_overflow !== void 0) {
         throw new Error(`${location}.quota_overflow was replaced by cross_provider.`);
       }
-      if (model.cross_provider !== void 0) validateCrossProvider(config, lane, model, protocol, location);
+      if (Array.isArray(model.cross_provider)) {
+        if (model.cross_provider.length !== 2) throw new Error(`${location}.cross_provider must list exactly two routes.`);
+        const providers = model.cross_provider.map((route, index) => validateCrossProvider(config, lane, route, protocol, `${location}.cross_provider[${index}]`));
+        if (new Set(providers).size !== providers.length) throw new Error(`${location}.cross_provider must list distinct providers.`);
+      } else if (model.cross_provider !== void 0) {
+        validateCrossProvider(config, lane, model.cross_provider, protocol, `${location}.cross_provider`);
+      }
       if (model.thinking_level === void 0) return;
       if (protocol !== "google-generate-content") {
         throw new Error(`${location}.thinking_level is only supported by google-generate-content.`);
@@ -117,6 +126,7 @@ var require_index = __commonJS({
         throw new Error(`${location}.last_resort.provider must be anthropic or openai, configured as the second provider of the lane's own slot.`);
       }
       const cross = lane.primary.cross_provider;
+      if (Array.isArray(cross)) throw new Error(`${location}.last_resort requires exactly one cross_provider route.`);
       const crossProvider = cross && (cross.credential_provider ?? config.lanes.find((candidate) => candidate?.id === cross.credential_lane)?.provider);
       if (!crossProvider || crossProvider === last.provider) {
         throw new Error(`${location}.last_resort needs a primary cross_provider route on another plan provider; it serves only when both are spent.`);
@@ -909,6 +919,7 @@ var require_review_status = __commonJS({
       publication_failed: "\u7ED3\u679C\u53D1\u5E03\u5931\u8D25\uFF0C\u4E0D\u8BA1\u5165 quorum",
       resending: "\u6A21\u578B\u672A\u53D7\u7406\uFF0C\u6362\u4F1A\u8BDD\u91CD\u53D1\u4E00\u6B21\u4E2D",
       cross: "\u672C\u4F9B\u5E94\u5546\u672A\u4EA7\u751F\u53EF\u7528\u5BA1\u6838\uFF0C\u540C\u6A21\u578B\u7ECF\u53E6\u4E00\u4F9B\u5E94\u5546\u8FD0\u884C\u4E2D",
+      cross_model: "\u672C\u4F9B\u5E94\u5546\u672A\u4EA7\u751F\u53EF\u7528\u5BA1\u6838\uFF0C\u53E6\u4E00\u4F9B\u5E94\u5546\u7684\u515C\u5E95\u6A21\u578B\u8FD0\u884C\u4E2D",
       account: "key \u672A\u80FD\u670D\u52A1\uFF0C\u540C\u6A21\u578B\u6362\u540C\u4E00 Secret \u69FD\u4F4D\u7684\u4E0B\u4E00\u628A key \u8FD0\u884C\u4E2D",
       last_resort: "\u4E24\u5BB6\u5957\u9910\u989D\u5EA6\u90FD\u5DF2\u7528\u5B8C\uFF0C\u6700\u540E\u515C\u5E95\u8FD0\u884C\u4E2D",
       quota: "\u4F9B\u5E94\u5546\u989D\u5EA6\u7528\u5C3D\uFF0C\u5BA1\u6838\u672A\u751F\u6210",
@@ -2024,9 +2035,7 @@ ${requestError || ""}`;
     const windowMs = modelWindowMs(lane, model) - outcome.elapsedMs - delayMs;
     return windowMs >= UNSERVED_RESEND_MIN_WINDOW_MS ? { delayMs, windowMs } : null;
   }
-  function crossRoute(lane, model) {
-    const cross = model.cross_provider;
-    if (!cross) return null;
+  function crossRoute(lane, model, cross) {
     const target = lanes.find((candidate) => candidate.id === cross.credential_lane);
     const provider = cross.credential_provider ?? target?.provider;
     const credentials = credentialsFor(cross.credential_lane, provider);
@@ -2034,7 +2043,7 @@ ${requestError || ""}`;
       console.log(`[Lane ${lane.id}/${model.id}] a cross-provider fallback is configured, but the Lane ${cross.credential_lane} secret slot is not provisioned.`);
       return null;
     }
-    return { provider, credentialLane: target.id, modelId: cross.id, keyIndex: pickedKey(target.id, provider) };
+    return { provider, credentialLane: target.id, modelId: cross.id, label: cross.label, keyIndex: pickedKey(target.id, provider) };
   }
   function validateAndRender(lane, text, model, complete, finishReason) {
     const supplied = contextFor(model, lane.id).pack;
@@ -2181,14 +2190,14 @@ ${requestError || ""}`;
         return null;
       }
       let ownQuota = null;
-      const steps = [{ crossing: false, key: stage.startKey() }];
+      const steps = [{ key: stage.startKey() }];
       const keysTried = /* @__PURE__ */ new Set();
-      for (const { crossing, key, from } of steps) {
-        const via = crossing ? crossRoute(lane, model) : null;
-        if (crossing && !via) break;
+      for (const { cross: cross2, key, from } of steps) {
+        const via = cross2 ? crossRoute(lane, model, cross2) : null;
+        if (cross2 && !via) continue;
         if (via) {
           console.log(`[Lane ${lane.id}/${model.id}] no usable review from ${lane.provider}; sending the same request once to ${via.modelId} on ${via.provider} through the Lane ${via.credentialLane} secret slot.`);
-          await statusPublisher.update(lane.id, "cross", `${via.modelId} @ ${via.provider}`, ownQuota?.status);
+          await statusPublisher.update(lane.id, via.label ? "cross_model" : "cross", `${via.modelId} @ ${via.provider}`, ownQuota?.status);
         }
         if (from) await statusPublisher.update(lane.id, "account", `${model.id} @ key ${key + 1}`);
         const route = via ?? stage.route(model, key);
@@ -2215,7 +2224,7 @@ ${requestError || ""}`;
         lastOutcome = "";
         const quotaNote = outcome.quota ? quotaWording(route.provider, outcome.quota) : null;
         if (quotaNote) quotaProviders.add(route.provider);
-        if (!crossing) ownQuota = quotaNote;
+        if (!cross2) ownQuota = quotaNote;
         const quotaKey = outcome.quota && `${route.provider}:${outcome.quota.credit ? "credit" : outcome.quota.window ?? "plan"}`;
         if (quotaNote && !quotaNotes.some((note) => note.key === quotaKey)) quotaNotes.push({ key: quotaKey, provider: route.provider, ...quotaNote });
         if (response?.ok && !requestError && failureKind !== "gateway-blocked") {
@@ -2269,7 +2278,7 @@ ${requestError || ""}`;
         if (!quotaNote) onlyQuota = false;
         const failed = lastClosedStream ? `HTTP ${lastClosedStream.httpStatus}, stream closed before the model finished after ${lastClosedStream.seconds} s` : `HTTP ${response?.status ?? "request failed"}${quotaNote ? `, ${quotaNote.tried}` : ""}`;
         tried.push(`${attemptLabel} -> ${lastFailureKind === "report-invalid" ? `evidence contract rejected: ${lastReportError}` : lastOutcome || failed} (${attempts ?? 0} attempt(s))`);
-        if (crossing) continue;
+        if (cross2) continue;
         if (stage.keyCount > 1 && accountFailure(outcome)) {
           if (outcome.failureKind === "quota-exhausted" || outcome.failureKind === "authentication-failed") stage.spent.add(key);
           if (outcome.failureKind === "quota-exhausted") stage.creditSpent.add(key);
@@ -2277,11 +2286,13 @@ ${requestError || ""}`;
           if (next !== void 0) {
             const reason = accountReason(outcome, route.provider);
             console.log(`[Lane ${lane.id}/${model.id}] key ${key + 1} of ${stage.keyCount} could not serve (${outcome.failureKind || "rate limited"}, HTTP ${outcome.httpStatus ?? "none"}); sending the same request once with key ${next + 1} of the Lane ${lane.id} slot.`);
-            steps.push({ crossing: false, key: next, from: { index: key, reason } });
+            steps.push({ key: next, from: { index: key, reason } });
             continue;
           }
         }
-        if (stage.crosses) steps.push({ crossing: true });
+        if (stage.crosses && model.cross_provider) {
+          steps.push(...[].concat(model.cross_provider).map((route2) => ({ cross: route2 })));
+        }
       }
       return null;
     }
@@ -2306,7 +2317,7 @@ ${requestError || ""}`;
       }
     }
     const last = lane.last_resort;
-    const cross = primary.cross_provider;
+    const cross = last && primary.cross_provider;
     const crossProvider = cross && (cross.credential_provider ?? lanes.find((candidate) => candidate.id === cross.credential_lane)?.provider);
     if (last && !bestPartial && onlyQuota && quotaProviders.has(lane.provider) && quotaProviders.has(crossProvider)) {
       const lastCredentials = credentialsFor(lane.id, last.provider);
@@ -2398,14 +2409,16 @@ ${fence}
     }
     const reviewedAt = (/* @__PURE__ */ new Date()).toISOString().replace(/\.\d{3}Z$/, "Z");
     const { servedBy, servedVia, servedKey, review, reasoningLength, reasoningUnit, degraded, status, firstPass } = result;
+    const crossLabel = servedVia?.label;
+    const servedModelId = crossLabel ? servedVia.modelId : servedBy?.id;
     const keyText = servedKey ? ` \xB7 key ${servedKey.index + 1}/${servedKey.count}` : "";
     const viaText = servedVia?.lastResort ? ` via ${servedVia.provider} (last resort: plan quotas spent)${keyText}` : servedVia ? ` via ${servedVia.provider} ${servedVia.modelId} (${lane.provider} unavailable)` : keyText;
     const isFirstPass = firstPass === true && status === "valid";
     const prior = isFirstPass ? null : priorFirstPass(lane);
-    const modelLine = degraded ? `Lane ${lane.id}: ${primary.id} unavailable -> served by ${servedBy.id}${viaText}` : `Lane ${lane.id}: ${servedBy?.id ?? primary.id}${isFirstPass ? " (first pass)" : ""}${viaText}`;
+    const modelLine = crossLabel ? `Lane ${lane.id}: ${servedModelId} via ${servedVia.provider} (${servedBy.id} on ${lane.provider} unavailable)` : degraded ? `Lane ${lane.id}: ${primary.id} unavailable -> served by ${servedBy.id}${viaText}` : `Lane ${lane.id}: ${servedBy?.id ?? primary.id}${isFirstPass ? " (first pass)" : ""}${viaText}`;
     const banner = [
       ...degraded ? [`> \u2139\uFE0F Lane ${lane.id} \u7684 \`${primary.label}\` \u672A\u4EA7\u751F\u53EF\u7528\u5BA1\u6838\uFF0C\u672C\u6761 review \u7531\u540C\u901A\u9053\u5907\u7528\u6A21\u578B \`${servedBy.label}\` \u751F\u6210\u3002`] : [],
-      ...servedVia?.lastResort ? [`> \u2139\uFE0F Lane ${lane.id} \u7684\u4E24\u5BB6\u5957\u9910\u989D\u5EA6\u90FD\u5DF2\u7528\u5B8C\uFF08${result.lastResortReason}\uFF09\uFF0C\u672C\u6761 review \u7531\u6700\u540E\u515C\u5E95 \`${servedBy.label}\` \u7ECF \`${servedVia.provider}\`\uFF08Lane ${lane.id} \u7684\u56FA\u5B9A Secret \u69FD\u4F4D\uFF09\u751F\u6210\u3002`] : servedVia ? [`> \u2139\uFE0F Lane ${lane.id} \u7684 \`${servedBy.label}\` \u5728 \`${lane.provider}\` \u4E0A\u672A\u4EA7\u751F\u53EF\u7528\u5BA1\u6838${result.ownQuota ? `\uFF08${result.ownQuota.banner}\uFF09` : ""}\uFF0C\u672C\u6761 review \u7531\u540C\u4E00\u6A21\u578B\u7ECF \`${servedVia.provider}\`\uFF08Lane ${servedVia.credentialLane} \u7684\u56FA\u5B9A Secret \u69FD\u4F4D\uFF09\u751F\u6210\u3002`] : [],
+      ...servedVia?.lastResort ? [`> \u2139\uFE0F Lane ${lane.id} \u7684\u4E24\u5BB6\u5957\u9910\u989D\u5EA6\u90FD\u5DF2\u7528\u5B8C\uFF08${result.lastResortReason}\uFF09\uFF0C\u672C\u6761 review \u7531\u6700\u540E\u515C\u5E95 \`${servedBy.label}\` \u7ECF \`${servedVia.provider}\`\uFF08Lane ${lane.id} \u7684\u56FA\u5B9A Secret \u69FD\u4F4D\uFF09\u751F\u6210\u3002`] : servedVia ? [`> \u2139\uFE0F Lane ${lane.id} \u7684 \`${servedBy.label}\` \u5728 \`${lane.provider}\` \u4E0A\u672A\u4EA7\u751F\u53EF\u7528\u5BA1\u6838${result.ownQuota ? `\uFF08${result.ownQuota.banner}\uFF09` : ""}\uFF0C\u672C\u6761 review \u7531${crossLabel ? `\u515C\u5E95\u6A21\u578B \`${crossLabel}\` ` : "\u540C\u4E00\u6A21\u578B"}\u7ECF \`${servedVia.provider}\`\uFF08Lane ${servedVia.credentialLane} \u7684\u56FA\u5B9A Secret \u69FD\u4F4D\uFF09\u751F\u6210\u3002`] : [],
       ...servedKey?.from ? [`> \u2139\uFE0F Lane ${lane.id} \u7684\u7B2C ${servedKey.from.index + 1} \u628A key \u672A\u80FD\u670D\u52A1\uFF08${servedKey.from.reason}\uFF09\uFF0C\u672C\u6761 review \u7531\u540C\u4E00\u6A21\u578B\u7ECF\u540C\u4E00 Secret \u69FD\u4F4D\u7684\u7B2C ${servedKey.index + 1} \u628A key \u751F\u6210\u3002`] : []
     ];
     if (isFirstPass) {
@@ -2434,7 +2447,7 @@ ${fence}
       ...result.record.lossy ? { lossy: true } : {}
     } : laneRecords.get(lane.id)?.state ?? null;
     const recordLine = record ? [encodeState(record)] : [];
-    const servedLabel = servedBy && servedVia ? `${servedBy.id} via ${servedVia.provider}` : servedBy?.id;
+    const servedLabel = servedBy && servedVia ? `${servedModelId} via ${servedVia.provider}` : servedModelId;
     const priorLabel = prior && ([lane.first_pass, lane.last_resort?.first_pass].find((model) => model?.id === prior.model)?.label ?? prior.model);
     const carried = (content) => prior ? [
       "",
@@ -2451,7 +2464,7 @@ ${fence}
       `<!-- ai-pr-review-bot:lane-${lane.id} -->`,
       `<!-- ai-pr-review-evidence:v2 lane=${lane.id} head=${reviewHeadSha} workflow=${workflowSha} status=${status} -->`,
       ...recordLine,
-      `## AI PR Review \xB7 Lane ${lane.id} \xB7 ${servedBy?.label ?? primary.label}${isFirstPass ? " \xB7 \u9996\u5BA1" : ""}${incremental ? " \xB7 \u589E\u91CF" : ""}`,
+      `## AI PR Review \xB7 Lane ${lane.id} \xB7 ${crossLabel ?? servedBy?.label ?? primary.label}${isFirstPass ? " \xB7 \u9996\u5BA1" : ""}${incremental ? " \xB7 \u589E\u91CF" : ""}`,
       "",
       `> \u5BA1\u6838\u63D0\u4EA4\uFF1A\`${reviewedHeadShortSha}\` \xB7 \u66F4\u65B0\u65F6\u95F4\uFF1A\`${reviewedAt}\` \xB7 \u6B64\u8BC4\u8BBA\u4F1A\u968F PR \u65B0\u63D0\u4EA4\u539F\u5730\u66F4\u65B0 \xB7 [Run](${runUrl})`,
       "",
