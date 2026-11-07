@@ -812,7 +812,9 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
     }
     // The target slot's PR-number key, never one its own lane skipped to: lanes run in parallel, so
     // that lane's spent keys would make the account depend on timing.
-    return { provider, credentialLane: target.id, modelId: cross.id, label: cross.label, keyIndex: pickedKey(target.id, provider) };
+    const sameModel = cross.id === model.id || cross.id.endsWith(`/${model.id}`);
+    const label = cross.label ?? (sameModel ? undefined : cross.id);
+    return { provider, credentialLane: target.id, modelId: cross.id, label, keyIndex: pickedKey(target.id, provider) };
   }
 
   // A complete report is checked against exactly what was supplied, its findings get the ids the

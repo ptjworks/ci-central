@@ -2393,6 +2393,14 @@ check('NebulaLab C: failed Sol tries Terra on OpenAI before Luna on Go', !r.erro
   && laneCCalls(r).map((call) => call.model).join(',') === 'gpt-6.1-sol,gpt-6.1-terra,gpt-6-luna'
   && laneCCalls(r).map((call) => call.headers.authorization).join(',') === 'Bearer openai-test-key,Bearer openai-test-key,Bearer lane-a-key'
   && laneCBody(r).includes('GPT-6 Luna') && r.statusUpdates.at(-1).includes('gpt-6-luna via opencode-go'));
+const unnamedFallback = structuredClone(nebulaConfig);
+delete unnamedFallback.lanes[2].primary.cross_provider[0].label;
+r = await scenario((call) => openaiUnavailable(call) ? reply(503, 'unavailable') : healthy(call), {
+  ...openaiEgress, PR_REVIEW_CONFIG: JSON.stringify(unnamedFallback),
+});
+check('an unlabeled alternate model is reported using its actual route id', !r.error
+  && laneCBody(r).includes('## AI PR Review · Lane C · gpt-6-luna')
+  && r.statusUpdates.at(-1).includes('gpt-6-luna via opencode-go'));
 r = await scenario((call) => openaiUnavailable(call) ? reply(503, 'unavailable')
   : lunaOnLaneAGo(call) ? reply(429, '{"error":{"type":"GoUsageLimitError","message":"Go usage limit exceeded"}}') : healthy(call), openaiEgress);
 check('NebulaLab C: when Go is spent, one Luna request on CC is the final attempt', !r.error

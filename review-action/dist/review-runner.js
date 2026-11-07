@@ -2043,7 +2043,9 @@ ${requestError || ""}`;
       console.log(`[Lane ${lane.id}/${model.id}] a cross-provider fallback is configured, but the Lane ${cross.credential_lane} secret slot is not provisioned.`);
       return null;
     }
-    return { provider, credentialLane: target.id, modelId: cross.id, label: cross.label, keyIndex: pickedKey(target.id, provider) };
+    const sameModel = cross.id === model.id || cross.id.endsWith(`/${model.id}`);
+    const label = cross.label ?? (sameModel ? void 0 : cross.id);
+    return { provider, credentialLane: target.id, modelId: cross.id, label, keyIndex: pickedKey(target.id, provider) };
   }
   function validateAndRender(lane, text, model, complete, finishReason) {
     const supplied = contextFor(model, lane.id).pack;

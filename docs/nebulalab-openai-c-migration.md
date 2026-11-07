@@ -12,9 +12,9 @@ provider bundles, for a last resort only (see the end of this page).
 First-pass models never cross providers. Failure enters the regular model chain in
 the same round. Only a valid first pass records completion; otherwise the next push
 tries again. Success ends the lane's round, and its report stays folded in later comments.
-Existing PRs without a C first-pass marker receive Sol at their next review. Existing
-Terra first-pass markers remain valid and stay folded; the model upgrade does not
-repeat an already completed first pass.
+Existing PRs without a C first-pass marker receive Sol at their next review. A Sol
+marker or a historical Terra first-pass marker from the October rollout still
+records completion. Its report remains folded on later reviews.
 
 Since 2026-11-07, NebulaLab uses Sol high for the first pass and Terra high for
 subsequent reviews. When Sol cannot produce a usable first pass, the same round tries
