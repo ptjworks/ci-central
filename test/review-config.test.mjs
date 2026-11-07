@@ -44,7 +44,8 @@ for (const repository of repositories) {
   assert.ok(fromSource.lanes.every((lane) => lane.fallbacks.length === 0), `${repository} lanes must not fall back to another model`);
   assert.deepEqual(fromBundle, fromSource, `${repository} source and dist loaders disagree`);
   assert.deepEqual(fromSource.lanes.map((lane) => lane.id), ['A', 'B', 'C']);
-  assert.deepEqual(fromSource.lanes.map((lane) => lane.primary.id), ['muse-spark-1.3-contributor', 'claude-haiku-5-5', 'gpt-6-luna']);
+  const cModel = onAnthropic ? 'gpt-6.1-terra' : 'gpt-6-luna';
+  assert.deepEqual(fromSource.lanes.map((lane) => lane.primary.id), ['muse-spark-1.3-contributor', 'claude-haiku-5-5', cModel]);
   // Lanes A/B draw on the OpenCode Go plan (NebulaLab's B on Anthropic) and Lane C on Command Code.
   assert.deepEqual(fromSource.lanes.map((lane) => lane.provider), ['opencode-go', onAnthropic ? 'anthropic' : 'opencode-go', onAnthropic ? 'openai' : 'command-code'], `${repository} lane providers changed`);
   // A fallback on the same provider cannot help once that provider's quota is gone or it is down.
@@ -55,9 +56,15 @@ for (const repository of repositories) {
   // Every Lane C slot is a bundle now, so the A/B cross routes name its Command Code profile.
   assert.deepEqual(fromSource.lanes.map((lane) => lane.primary.cross_provider), [
     { credential_lane: 'C', id: 'meta/muse-spark-1.3-contributor', credential_provider: 'command-code' },
-    { credential_lane: 'C', id: 'claude-haiku-5-5', credential_provider: 'command-code' },
-    onAnthropic ? { credential_lane: 'C', credential_provider: 'command-code', id: 'gpt-6-luna' } : { credential_lane: 'A', id: 'gpt-6-luna' },
-  ], `${repository} each primary must name the same model on the other provider`);
+    onAnthropic ? [
+      { credential_lane: 'A', id: 'claude-haiku-5-5' },
+      { credential_lane: 'C', id: 'claude-haiku-5-5', credential_provider: 'command-code' },
+    ] : { credential_lane: 'C', id: 'claude-haiku-5-5', credential_provider: 'command-code' },
+    onAnthropic ? [
+      { credential_lane: 'A', id: 'gpt-6-luna', label: 'GPT-6 Luna' },
+      { credential_lane: 'C', credential_provider: 'command-code', id: 'gpt-6-luna', label: 'GPT-6 Luna' },
+    ] : { credential_lane: 'A', id: 'gpt-6-luna' },
+  ], `${repository} cross-provider model or slot changed`);
   // The owner's decision, 2026-11-03: with Command Code and OpenCode Go both spent, the other
   // repositories fall back once more to paid APIs, and only then. Lane A has none. Lane B asks
   // Haiku 5.5 alone on the Anthropic API (the two NebulaLab accounts, 2:1); Lane C asks OpenAI
@@ -88,13 +95,13 @@ for (const repository of repositories) {
   assert.equal(fromSource.lanes[1].primary.effort, 'high', `${repository} Haiku must stay at high effort`);
   assert.equal(fromSource.lanes[0].primary.reasoning_effort, onAnthropic ? undefined : 'xhigh',
     `${repository} Muse effort must follow its review policy`);
-  assert.equal(fromSource.lanes[2].primary.reasoning_effort, onAnthropic ? 'xhigh' : 'high',
+  assert.equal(fromSource.lanes[2].primary.reasoning_effort, 'high',
     `${repository} Luna effort must follow its review policy`);
   // Calibration took Muse and Hy3 from near-silent to 1-5 findings on large NebulaLab PRs with no
   // high-confidence clean-change noise; on Haiku it only added noise. GPT-6 Luna took over Lane C
   // with Hy3's setting and was measured with it on 2026-10-19.
   assert.deepEqual(fromSource.lanes.flatMap((lane) => [lane.primary, ...lane.fallbacks]).filter((model) => model.reporting_calibration).map((model) => model.id),
-    ['muse-spark-1.3-contributor', 'gpt-6-luna'], `${repository} calibration must stay limited to Muse and GPT-6 Luna`);
+    ['muse-spark-1.3-contributor', cModel], `${repository} calibration must stay limited to Muse and Lane C`);
   assert.ok(fromSource.lanes.every((lane) => [lane.primary, ...lane.fallbacks].every((model) => model.thinking_level === undefined)),
     `${repository} no active lane uses Google thinking`);
   // Every active model must send an explicit output ceiling.
@@ -200,8 +207,9 @@ const inputTokenRoom = {
   // one entry bounds both routes; it is counted together with its output, the conservative reading.
   'gpt-6-luna': 1000000,
   'gpt-6.1-sol': 1000000,
+  'gpt-6.1-terra': 1050000,
 };
-const sharesWindowWithOutput = new Set(['kimi-k2.7-code', 'claude-haiku-5-5', 'claude-sonnet-5-5', 'tencent/hy3-paid', 'z-ai/glm-5.3-flash', 'moonshotai/Kimi-K2.7-Code', 'gpt-6-luna', 'gpt-6.1-sol']);
+const sharesWindowWithOutput = new Set(['kimi-k2.7-code', 'claude-haiku-5-5', 'claude-sonnet-5-5', 'tencent/hy3-paid', 'z-ai/glm-5.3-flash', 'moonshotai/Kimi-K2.7-Code', 'gpt-6-luna', 'gpt-6.1-sol', 'gpt-6.1-terra']);
 for (const repository of repositories) {
   const config = source.loadConfig(repository, actionPath);
   const policy = config.review_policy;
@@ -225,8 +233,7 @@ for (const repository of repositories) {
       assert.ok((diffChars + promptChars) / WORST_CHARS_PER_TOKEN + sharedOutput <= inputTokenRoom[model.id],
         `${repository} Lane ${lane.id} ${model.id} context budget can exceed its model window`);
       // The cross-provider fallback resends the same prompt, so it must fit the target model's window too.
-      const crossId = model.cross_provider?.id;
-      if (crossId) {
+      for (const { id: crossId } of [].concat(model.cross_provider ?? [])) {
         const crossOutput = sharesWindowWithOutput.has(crossId) ? model.max_output_tokens : 0;
         assert.ok((diffChars + promptChars) / WORST_CHARS_PER_TOKEN + crossOutput <= inputTokenRoom[crossId],
           `${repository} Lane ${lane.id} ${model.id} cross-provider ${crossId} context budget can exceed its model window`);
@@ -242,9 +249,9 @@ assert.equal(nebula.lanes[2].provider, 'openai');
 assert.deepEqual(nebula.lanes[2].credential_providers, ['openai', 'command-code']);
 assert.equal(nebula.lanes[2].first_pass.id, 'gpt-6.1-sol');
 assert.equal(nebula.lanes[2].first_pass.reasoning_effort, 'high');
-assert.equal(nebula.lanes[2].primary.reasoning_effort, 'xhigh');
+assert.equal(nebula.lanes[2].primary.reasoning_effort, 'high');
 assert.deepEqual(nebula.lanes.map((lane) => lane.protocol), ['openai-responses', 'anthropic-messages', 'openai-responses']);
-assert.deepEqual(nebula.lanes.map((lane) => lane.primary.id), ['muse-spark-1.3-contributor', 'claude-haiku-5-5', 'gpt-6-luna']);
+assert.deepEqual(nebula.lanes.map((lane) => lane.primary.id), ['muse-spark-1.3-contributor', 'claude-haiku-5-5', 'gpt-6.1-terra']);
 assert.equal(nebula.lanes[0].primary.context_profile, 'full');
 // Sonnet 5.5 found real defects Haiku missed and none of Haiku's false P1s on NebulaLab
 // #1133/#1237/#1241 (2026-10-15), at 0.4x Haiku's output. A first review sees a median 97% of
@@ -364,7 +371,9 @@ for (const loader of [source, bundled]) {
   for (const [mutate, message] of [
     [(config) => { config.lanes[0].primary.cross_provider.credential_lane = 'A'; delete config.lanes[0].primary.cross_provider.credential_provider; }, /must name another configured lane/],
     [(config) => { config.lanes[0].primary.cross_provider.credential_lane = 'D'; delete config.lanes[0].primary.cross_provider.credential_provider; }, /must name another configured lane/],
-    [(config) => { config.lanes[1].provider = 'opencode-go'; config.lanes[1].primary.cross_provider.credential_lane = 'A'; delete config.lanes[1].primary.cross_provider.credential_provider; }, /provider other than the lane's own/],
+    [(config) => { config.lanes[1].provider = 'opencode-go'; }, /provider other than the lane's own/],
+    [(config) => { config.lanes[1].primary.cross_provider.pop(); }, /exactly two routes/],
+    [(config) => { config.lanes[1].primary.cross_provider[1] = config.lanes[1].primary.cross_provider[0]; }, /distinct providers/],
     [(config) => { config.lanes[0].primary.cross_provider.id = ' '; }, /cross_provider\.id must be a non-empty string/],
     [(config) => { config.lanes[0].primary.cross_provider.provider = 'other'; }, /only credential_lane and id/],
     [(config) => { config.lanes[0].primary.cross_provider = 'C'; }, /only credential_lane and id/],

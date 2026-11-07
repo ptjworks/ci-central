@@ -344,6 +344,7 @@ const plainSlots = (lanes) => lanes.map((source) => {
 const centralConfig = { ...structuredClone(nebulaConfig), lanes: plainSlots(licenseConfig.lanes) };
 // Exercise the previously deployed NebulaLab policy as well as the new bundled-slot policy.
 const legacyNebulaConfig = { ...structuredClone(nebulaConfig), lanes: centralConfig.lanes.map((lane) => structuredClone(lane.id === 'B' ? nebulaConfig.lanes[1] : lane)) };
+legacyNebulaConfig.lanes[1].primary.cross_provider = legacyNebulaConfig.lanes[1].primary.cross_provider.at(-1);
 delete legacyNebulaConfig.lanes[1].primary.cross_provider.credential_provider;
 const patch = (filename, size) => ({ filename, status: 'modified', additions: 2, deletions: 1, patch: `@@\n${'+x\n'.repeat(size)}` });
 const files = [patch('src/a.ts', 100), patch('tests/a.test.ts', 100)];
@@ -2371,7 +2372,7 @@ const openaiEgress = { ...twEgress, PR_REVIEW_CONFIG: JSON.stringify(nebulaConfi
   LANE_C_KEY: providerBundle({ openai: 'openai-test-key', 'command-code': 'cc-test-key' }),
   LANE_C_API_BASE: providerBundle({ openai: 'https://lane-c.openai.example.test/v1', 'command-code': 'https://lane-c.cc.example.test/v1' }) };
 const laneCBody = (result) => result.posted.find((body) => body.startsWith('<!-- ai-pr-review-bot:lane-C -->')) || '';
-const laneCCalls = (result) => result.captured.filter((call) => call.lane === 'C');
+const laneCCalls = (result) => result.captured.filter((call) => call.lane === 'C' || (call.lane === 'A' && call.model === 'gpt-6-luna'));
 r = await scenario(healthy, openaiEgress, { useBundle: true });
 const solFirst = laneCBody(r);
 check('NebulaLab C: Sol alone performs the first pass on OpenAI with high reasoning', !r.error
@@ -2381,17 +2382,42 @@ check('NebulaLab C: Sol alone performs the first pass on OpenAI with high reason
   && solFirst.includes('ai-pr-review-first-pass:v1 lane=C') && solFirst.includes('status=valid'));
 r = await scenario(healthy, openaiEgress, { useBundle: true, files: [patch('src/a.ts', 101), patch('tests/a.test.ts', 100)], comments: [{ body: solFirst }], pulls: [{ ...pull, head: { ...pull.head, sha: H2 } }],
   context: { ...context, payload: { pull_request: { number: 42, head: { sha: H2 } } } } });
-check('NebulaLab C: subsequent heads use Luna on OpenAI and preserve the Sol first pass', !r.error
-  && laneCCalls(r).map((call) => call.model).join(',') === 'gpt-6-luna'
-  && laneCCalls(r)[0].body.reasoning?.effort === 'xhigh' && laneCBody(r).includes('model=gpt-6.1-sol'));
-r = await scenario((call) => call.url.startsWith('https://lane-c.openai.') ? reply(503, 'unavailable') : healthy(call), openaiEgress);
-check('NebulaLab C: failed Sol proceeds to Luna, then exactly one same-model CC fallback', !r.error
-  && laneCCalls(r).map((call) => call.model).join(',') === 'gpt-6.1-sol,gpt-6-luna,gpt-6-luna'
-  && laneCCalls(r).map((call) => call.headers.authorization).join(',') === 'Bearer openai-test-key,Bearer openai-test-key,Bearer cc-test-key'
-  && laneCCalls(r).slice(1).every((call) => call.body.reasoning?.effort === 'xhigh')
-  && !laneCBody(r).includes('ai-pr-review-first-pass:v1 lane=C') && laneCBody(r).includes('via command-code'));
+check('NebulaLab C: subsequent heads use Terra high on OpenAI and preserve the Sol first pass', !r.error
+  && laneCCalls(r).map((call) => call.model).join(',') === 'gpt-6.1-terra'
+  && laneCCalls(r)[0].headers.authorization === 'Bearer openai-test-key'
+  && laneCCalls(r)[0].body.reasoning?.effort === 'high' && laneCBody(r).includes('model=gpt-6.1-sol'));
+const openaiUnavailable = (call) => call.url.startsWith('https://lane-c.openai.');
+const lunaOnLaneAGo = (call) => call.lane === 'A' && call.model === 'gpt-6-luna';
+r = await scenario((call) => openaiUnavailable(call) ? reply(503, 'unavailable') : healthy(call), openaiEgress);
+check('NebulaLab C: failed Sol tries Terra on OpenAI before Luna on Go', !r.error
+  && laneCCalls(r).map((call) => call.model).join(',') === 'gpt-6.1-sol,gpt-6.1-terra,gpt-6-luna'
+  && laneCCalls(r).map((call) => call.headers.authorization).join(',') === 'Bearer openai-test-key,Bearer openai-test-key,Bearer lane-a-key'
+  && laneCBody(r).includes('GPT-6 Luna') && r.statusUpdates.at(-1).includes('gpt-6-luna via opencode-go'));
+const unnamedFallback = structuredClone(nebulaConfig);
+delete unnamedFallback.lanes[2].primary.cross_provider[0].label;
+r = await scenario((call) => openaiUnavailable(call) ? reply(503, 'unavailable') : healthy(call), {
+  ...openaiEgress, PR_REVIEW_CONFIG: JSON.stringify(unnamedFallback),
+});
+check('an unlabeled alternate model is reported using its actual route id', !r.error
+  && laneCBody(r).includes('## AI PR Review · Lane C · gpt-6-luna')
+  && r.statusUpdates.at(-1).includes('gpt-6-luna via opencode-go'));
+r = await scenario((call) => openaiUnavailable(call) ? reply(503, 'unavailable')
+  : lunaOnLaneAGo(call) ? reply(429, '{"error":{"type":"GoUsageLimitError","message":"Go usage limit exceeded"}}') : healthy(call), openaiEgress);
+check('NebulaLab C: when Go is spent, one Luna request on CC is the final attempt', !r.error
+  && laneCCalls(r).map((call) => call.model).join(',') === 'gpt-6.1-sol,gpt-6.1-terra,gpt-6-luna,gpt-6-luna'
+  && laneCCalls(r).map((call) => call.headers.authorization).join(',') === 'Bearer openai-test-key,Bearer openai-test-key,Bearer lane-a-key,Bearer cc-test-key'
+  && laneCCalls(r).every((call) => call.body.reasoning?.effort === 'high')
+  && !laneCBody(r).includes('ai-pr-review-first-pass:v1 lane=C')
+  && laneCBody(r).includes('## AI PR Review · Lane C · GPT-6 Luna')
+  && laneCBody(r).includes('Lane C: gpt-6-luna via command-code (gpt-6.1-terra on openai unavailable)')
+  && r.statusUpdates.at(-1).includes('gpt-6-luna via command-code'));
+r = await scenario((call) => call.lane === 'B' ? reply(503, 'unavailable') : healthy(call), openaiEgress);
+check('NebulaLab B: Anthropic failure tries Haiku on Go and stops when it serves', !r.error
+  && r.captured.filter((call) => call.model === 'claude-haiku-5-5').map((call) => call.lane).join(',') === 'B,A'
+  && laneBBody(r).includes('via opencode-go'));
 r = await scenario((call) => call.lane !== 'C' ? reply(503, 'unavailable') : healthy(call), openaiEgress);
-check('NebulaLab: A and B still cross to CC, never to the OpenAI profile or the C model chain', !r.error
+check('NebulaLab: A crosses to CC and B crosses to Go then CC, using only their own models', !r.error
+  && r.captured.filter((call) => call.model === 'claude-haiku-5-5').map((call) => call.lane).join(',') === 'B,A,C'
   && r.captured.filter((call) => call.lane === 'C' && call.model !== 'gpt-6.1-sol').map((call) => call.model).sort().join(',') === 'claude-haiku-5-5,meta/muse-spark-1.3-contributor'
   && r.captured.filter((call) => call.lane === 'C' && call.model !== 'gpt-6.1-sol').every((call) => call.headers.authorization === 'Bearer cc-test-key' || call.headers['x-api-key'] === 'cc-test-key'));
 r = await scenario(healthy, { ...openaiEgress, LANE_C_KEY: '{never-echo-this-secret' });
@@ -2414,7 +2440,7 @@ check('self-hosted OpenAI without an approved proxy never sends a direct request
   && !r.captured.some((call) => call.url.startsWith('https://lane-c.openai.'))
   && laneCCalls(r).some((call) => call.model === 'gpt-6-luna' && call.url.startsWith('https://lane-c.cc.')));
 
-r = await scenario((call) => call.url.startsWith('https://lane-c.openai.') ? reply(401, 'refused') : healthy(call), {
+r = await scenario((call) => openaiUnavailable(call) || lunaOnLaneAGo(call) ? reply(401, 'refused') : healthy(call), {
   ...openaiEgress, LANE_C_KEY: providerBundle({ openai: 'openai-one\nopenai-two', 'command-code': 'cc-one\ncc-two' }),
 });
 check('spent OpenAI account indices never change the CC profile PR-number key', !r.error

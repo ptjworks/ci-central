@@ -3,30 +3,31 @@
 NebulaLab's C runs on OpenAI first. Since 2026-11-03 the other six repositories also use
 provider bundles, for a last resort only (see the end of this page).
 
-| Lane | First pass | Regular review | Same-model cross-provider route |
+| Lane | First pass | Regular review | Cross-provider route |
 | --- | --- | --- | --- |
 | A | Muse Spark 1.3 Contributor on Go | Same | CC through C / command-code |
-| B | Sonnet 5.5 on Anthropic | Haiku 5.5 on Anthropic | Haiku through C / command-code |
-| C | GPT-6.1 Sol on OpenAI, high reasoning | GPT-6 Luna on OpenAI, xhigh reasoning | Luna through C / command-code |
+| B | Sonnet 5.5 on Anthropic | Haiku 5.5 on Anthropic | Haiku on Go (A), then Command Code (C) |
+| C | GPT-6.1 Sol on OpenAI, high reasoning | GPT-6.1 Terra on OpenAI, high reasoning | GPT-6 Luna high on Go (A), then Command Code (C) |
 
 First-pass models never cross providers. Failure enters the regular model chain in
 the same round. Only a valid first pass records completion; otherwise the next push
 tries again. Success ends the lane's round, and its report stays folded in later comments.
-Existing PRs without a C first-pass marker receive Sol at their next review. Existing
-Terra first-pass markers remain valid and stay folded; the model upgrade does not
-repeat an already completed first pass.
+Existing PRs without a C first-pass marker receive Sol at their next review. A Sol
+marker or a historical Terra first-pass marker from the October rollout still
+records completion. Its report remains folded on later reviews.
 
-As of 2026-11-03, Peter has chosen Sol high for the first pass and Luna xhigh for
-subsequent reviews. The planned OpenAI allowance is $200 per month, with unused
-credits expiring. On 2026-11-03 Peter extended the same Sol/Luna rule to the other
-repositories as their Lane C last resort, sharing this allowance. The allowance is
-planning context, not a new runtime spending limit. Historical
+Since 2026-11-07, NebulaLab uses Sol high for the first pass and Terra high for
+subsequent reviews. When Sol cannot produce a usable first pass, the same round tries
+Terra on OpenAI before it can cross to Luna. NebulaLab B and C try Go first and
+only reach Command Code if Go cannot produce a usable review. The other repositories'
+quota-only OpenAI last resort still uses Sol high followed by Luna xhigh. Their
+planned OpenAI allowance is shared with NebulaLab. Historical
 Terra/medium acceptance records under `docs/validation/nebulalab-openai-c/` remain
 unchanged and do not validate the upgraded model settings.
 
 The 2-of-3 quorum, deadlines, diff budgets, and Anthropic 2:1 account selection stay
 unchanged. Self-hosted OpenAI calls use the approved review proxy. Anthropic retains
-the dedicated Taiwan path. There is no third Go hop after Luna on CC.
+the dedicated Taiwan path. Neither fallback enters the target lane's model chain.
 
 ## Fixed secret interface
 
@@ -58,14 +59,15 @@ not write production secrets or pin callers to an unmerged central commit.
 2. Prepare the NebulaLab caller PR with `uses`, `central_workflow_sha`, and the applicable
    `PR_REVIEW_CENTRAL_SHA` constant on that same merged 40-character SHA. Preserve the
    independent Claude workflow, permissions, and six secret mappings.
-3. Drain or migrate active/queued runs and open PR caller/merge refs before they can
-   receive the new format. Coordinate the caller/secret cutover so no review starts
-   between the two secret writes.
-4. Trigger a fresh event; rerunning an old run keeps its old pin. Verify actual Sol high
-   first-pass evidence, Luna xhigh on the next head, correct provider labels and A/B CC routes.
+3. For a secret-format migration, drain or migrate active/queued runs and coordinate
+   the caller/secret cutover so no review starts between the two secret writes. A model
+   update that uses the existing bundle only requires re-pinning the caller.
+4. Trigger a fresh event. Rerunning an old run keeps its old pin. Verify actual Sol high
+   first-pass evidence, Terra high on the next round, and the Go-first fallback order.
 
-Retain original CC credentials in 1Password. Rollback must restore a compatible caller
-and the original plain C secret pair together. Never put values in files or logs.
+For a bundle migration, retain the original CC credentials in 1Password and roll back
+to a compatible caller and secret format together. A model-only rollback can keep
+the current bundle. Never put values in files or logs.
 
 ## Key rotation
 

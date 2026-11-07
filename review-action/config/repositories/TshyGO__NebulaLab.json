@@ -61,11 +61,17 @@
         "max_output_tokens": 120000,
         "effort": "high",
         "diff_char_budget": 1200000,
-        "cross_provider": {
-          "credential_lane": "C",
-          "id": "claude-haiku-5-5",
-          "credential_provider": "command-code"
-        }
+        "cross_provider": [
+          {
+            "credential_lane": "A",
+            "id": "claude-haiku-5-5"
+          },
+          {
+            "credential_lane": "C",
+            "id": "claude-haiku-5-5",
+            "credential_provider": "command-code"
+          }
+        ]
       },
       "fallbacks": []
     },
@@ -77,17 +83,25 @@
       "request_timeout_ms": 900000,
       "model_budget_ms": 900000,
       "primary": {
-        "id": "gpt-6-luna",
-        "label": "GPT-6 Luna",
+        "id": "gpt-6.1-terra",
+        "label": "GPT-6.1 Terra",
         "context_profile": "full",
         "max_output_tokens": 65536,
         "reporting_calibration": true,
-        "cross_provider": {
-          "credential_lane": "C",
-          "credential_provider": "command-code",
-          "id": "gpt-6-luna"
-        },
-        "reasoning_effort": "xhigh"
+        "cross_provider": [
+          {
+            "credential_lane": "A",
+            "id": "gpt-6-luna",
+            "label": "GPT-6 Luna"
+          },
+          {
+            "credential_lane": "C",
+            "credential_provider": "command-code",
+            "id": "gpt-6-luna",
+            "label": "GPT-6 Luna"
+          }
+        ],
+        "reasoning_effort": "high"
       },
       "fallbacks": [],
       "credential_providers": [

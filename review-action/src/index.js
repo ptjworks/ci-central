@@ -55,34 +55,35 @@ function validateModel(model, location) {
   }
 }
 
-// A model's cross-provider fallback: when its own request fails for any reason, the same model
-// is asked once through the provider behind another lane's fixed secret slot. It stays this
-// lane's review, by the same model; the other lane's own models are never entered, so two lanes
-// may name each other.
-function validateCrossProvider(config, lane, model, protocol, location) {
-  const cross = model.cross_provider;
+// A cross-provider fallback makes one request through a configured fixed secret slot.
+// A label identifies an explicitly different fallback model, not a provider alias.
+function validateCrossProvider(config, lane, cross, protocol, location) {
   if (!cross || typeof cross !== 'object' || Array.isArray(cross)
-    || Object.keys(cross).some((key) => !['credential_lane', 'credential_provider', 'id'].includes(key))) {
-    throw new Error(`${location}.cross_provider must be an object with only credential_lane and id, optionally credential_provider.`);
+    || Object.keys(cross).some((key) => !['credential_lane', 'credential_provider', 'id', 'label'].includes(key))) {
+    throw new Error(`${location} must be an object with only credential_lane and id, optionally credential_provider and label.`);
   }
   if (typeof cross.id !== 'string' || !cross.id.trim()) {
-    throw new Error(`${location}.cross_provider.id must be a non-empty string.`);
+    throw new Error(`${location}.id must be a non-empty string.`);
+  }
+  if (cross.label !== undefined && (typeof cross.label !== 'string' || !cross.label.trim())) {
+    throw new Error(`${location}.label must be a non-empty string.`);
   }
   const target = config.lanes.find((candidate) => candidate?.id === cross.credential_lane);
   if (!target || (cross.credential_lane === lane.id && cross.credential_provider === undefined)) {
-    throw new Error(`${location}.cross_provider.credential_lane must name another configured lane.`);
+    throw new Error(`${location}.credential_lane must name another configured lane.`);
   }
   const provider = cross.credential_provider ?? target.provider;
   if (cross.credential_provider !== undefined
     && (!target.credential_providers?.includes(cross.credential_provider))) {
-    throw new Error(`${location}.cross_provider.credential_provider must name a configured provider in the target slot.`);
+    throw new Error(`${location}.credential_provider must name a configured provider in the target slot.`);
   }
   if (typeof provider !== 'string' || provider === lane.provider) {
-    throw new Error(`${location}.cross_provider must use a provider other than the lane's own.`);
+    throw new Error(`${location} must use a provider other than the lane's own.`);
   }
   if (protocol === 'google-generate-content') {
-    throw new Error(`${location}.cross_provider is not supported by google-generate-content.`);
+    throw new Error(`${location} is not supported by google-generate-content.`);
   }
+  return provider;
 }
 
 function validateModelOptions(config, lane, model, location) {
@@ -106,7 +107,14 @@ function validateModelOptions(config, lane, model, location) {
   if (model.quota_overflow !== undefined) {
     throw new Error(`${location}.quota_overflow was replaced by cross_provider.`);
   }
-  if (model.cross_provider !== undefined) validateCrossProvider(config, lane, model, protocol, location);
+  if (Array.isArray(model.cross_provider)) {
+    if (model.cross_provider.length !== 2) throw new Error(`${location}.cross_provider must list exactly two routes.`);
+    const providers = model.cross_provider.map((route, index) =>
+      validateCrossProvider(config, lane, route, protocol, `${location}.cross_provider[${index}]`));
+    if (new Set(providers).size !== providers.length) throw new Error(`${location}.cross_provider must list distinct providers.`);
+  } else if (model.cross_provider !== undefined) {
+    validateCrossProvider(config, lane, model.cross_provider, protocol, `${location}.cross_provider`);
+  }
   if (model.thinking_level === undefined) return;
   if (protocol !== 'google-generate-content') {
     throw new Error(`${location}.thinking_level is only supported by google-generate-content.`);
@@ -131,6 +139,7 @@ function validateLastResort(config, lane, location) {
     throw new Error(`${location}.last_resort.provider must be anthropic or openai, configured as the second provider of the lane's own slot.`);
   }
   const cross = lane.primary.cross_provider;
+  if (Array.isArray(cross)) throw new Error(`${location}.last_resort requires exactly one cross_provider route.`);
   const crossProvider = cross && (cross.credential_provider ?? config.lanes.find((candidate) => candidate?.id === cross.credential_lane)?.provider);
   if (!crossProvider || crossProvider === last.provider) {
     throw new Error(`${location}.last_resort needs a primary cross_provider route on another plan provider; it serves only when both are spent.`);
