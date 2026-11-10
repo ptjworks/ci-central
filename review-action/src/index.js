@@ -228,6 +228,14 @@ function validateConfig(config, repository) {
       || lane.key_weights.some((weight) => !Number.isInteger(weight) || weight < 1 || weight > 100))) {
       throw new Error(`${location}.key_weights must be an array of 2 to 4 integers from 1 to 100.`);
     }
+    // Or the lane's own keys are used in order: every PR starts on the first, and a later key only
+    // takes a request the one before it could not serve for an account reason.
+    if (lane.key_order !== undefined && lane.key_order !== 'sequential') {
+      throw new Error(`${location}.key_order must be "sequential" when configured.`);
+    }
+    if (lane.key_order !== undefined && lane.key_weights !== undefined) {
+      throw new Error(`${location}.key_order cannot be combined with key_weights.`);
+    }
     if (!ALLOWED_PROTOCOLS.has(lane.protocol)) throw new Error(`${location}.protocol is not supported.`);
     for (const field of ['request_timeout_ms', 'model_budget_ms']) {
       if (lane[field] !== undefined && (!Number.isInteger(lane[field]) || lane[field] < 1)) {

@@ -2447,6 +2447,39 @@ check('spent OpenAI account indices never change the CC profile PR-number key', 
   && laneCCalls(r).filter((call) => call.url.startsWith('https://lane-c.cc.')).length === 1
   && laneCCalls(r).find((call) => call.url.startsWith('https://lane-c.cc.')).headers.authorization === 'Bearer cc-one');
 
+// Two OpenAI accounts share NebulaLab's Lane C slot and are used in order (the owner's decision,
+// 2026-11-10): every PR starts on key 1, so one account's prompt cache serves them all, and key 2
+// only takes the request key 1 could not serve for an account reason.
+const openaiTwoKeys = { ...openaiEgress, LANE_C_KEY: providerBundle({ openai: 'openai-one\nopenai-two', 'command-code': 'cc-test-key' }) };
+const laneCKeys = (result) => laneCCalls(result).map((call) => `${call.model}@${keyOf(call)}`).join(',');
+const leaksOpenaiKey = (result) => [...result.posted, ...result.statusUpdates, ...result.logs].some((text) => /openai-(one|two)/.test(text));
+for (const number of [42, 43]) {
+  r = await scenario(healthy, openaiTwoKeys, prNumbered(number));
+  check(`NebulaLab C: PR #${number} starts on the first of two OpenAI keys used in order`, !r.error
+    && laneCKeys(r) === 'gpt-6.1-sol@openai-one' && laneCBody(r).includes('· key 1/2 ·')
+    && r.logs.some((line) => line.includes(`[Lane C] the secret slot holds 2 keys, used in order; PR #${number} starts on key 1.`))
+    && !leaksOpenaiKey(r));
+}
+const openaiSpent = () => reply(429, '{"error":{"code":"insufficient_quota","type":"insufficient_quota","message":"You exceeded your current quota, please check your plan and billing details."}}');
+for (const useBundle of [false, true]) {
+  r = await scenario((call) => keyOf(call) === 'openai-one' ? openaiSpent() : healthy(call), openaiTwoKeys, prNumbered(43, { useBundle }));
+  check(`NebulaLab C: a spent first OpenAI key sends the same Sol request once with key 2 and never crosses to Luna (bundle ${useBundle})`, !r.error
+    && laneCKeys(r) === 'gpt-6.1-sol@openai-one,gpt-6.1-sol@openai-two'
+    && laneCBody(r).includes('status=valid') && laneCBody(r).includes('ai-pr-review-first-pass:v1 lane=C')
+    && laneCBody(r).includes('· key 2/2 ·') && laneCBody(r).includes('> ℹ️ Lane C 的第 1 把 key 未能服务（')
+    && r.logs.some((line) => line.includes('[Lane C/gpt-6.1-sol] key 1 of 2 could not serve'))
+    && !leaksOpenaiKey(r));
+}
+r = await scenario((call) => call.url.startsWith('https://lane-c.openai.') && call.model === 'gpt-6.1-sol' ? reply(503, 'unavailable') : healthy(call),
+  openaiTwoKeys, prNumbered(43));
+check('NebulaLab C: an OpenAI-side failure does not switch keys, and Terra follows on key 1', !r.error
+  && laneCKeys(r) === 'gpt-6.1-sol@openai-one,gpt-6.1-terra@openai-one' && !laneCBody(r).includes('把 key 未能服务'));
+const sequentialGo = structuredClone(centralConfig);
+sequentialGo.lanes[1].key_order = 'sequential';
+r = await scenario(healthy, { ...goTwoKeys, PR_REVIEW_CONFIG: JSON.stringify(sequentialGo) }, prNumbered(43));
+check('keys used in order: a plain slot starts every PR on key 1', !r.error && laneBKeys(r) === 'claude-haiku-5-5@go-key-1'
+  && r.logs.some((line) => line.includes('[Lane B] the secret slot holds 2 keys, used in order; PR #43 starts on key 1.')));
+
 
 // The other repositories' last resort (the owner's decision, 2026-11-03). Only when the lane's own
 // plan and its cross route's plan both report a spent quota does Lane B ask Haiku 5.5 on the
