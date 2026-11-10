@@ -50,6 +50,14 @@ requests or diagnostics. A provider selects both its key and endpoint. Legacy mu
 keys still mean separate accounts of one provider; bundles cannot use `key_weights`.
 NebulaLab B stays plain and weighted 2:1.
 
+Since 2026-11-10 NebulaLab's `openai` entry holds two accounts' keys, one per line (in JSON,
+one string joined by an escaped `\n`), and the lane sets `key_order: "sequential"`. Every PR
+starts on the first key, so one account's prompt cache serves all of them. The second key
+only takes a request the first could not serve for an account reason (quota spent, key
+refused, account rate limit), before the lane crosses to Luna. The runner keeps no state
+between runs: while the first key is spent, each review gets its immediate refusal first.
+The `command-code` entry and the other repositories' `openai` entries keep one key.
+
 ## Production cutover
 
 Never replace live C secrets while a caller can still run the old parser. This PR does
@@ -81,7 +89,7 @@ more than one slot, and each of them has to change:
 | OpenCode Go | Lane A, every repository (the script) | `opencode-go` in Lane B, every repository but NebulaLab |
 | Anthropic, two accounts | NebulaLab's Lane B, one key per line | `anthropic` in Lane B, every repository but NebulaLab |
 | Command Code | none | `command-code` in Lane C, every repository |
-| OpenAI | none | `openai` in Lane C, every repository |
+| OpenAI | none | `openai` in Lane C, every repository; NebulaLab's holds both accounts, in order |
 
 Rewrite a bundle whole, from the current 1Password values of both its providers, with a JSON
 serializer as in the examples in this document. A slot left on an old key gets 401 from that

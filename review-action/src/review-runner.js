@@ -620,7 +620,7 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
   }
 
   // A slot's keys split PRs by number, in proportion to its lane's key_weights, so each PR stays
-  // on one account. A key that failed for an account reason in this run is not started on again
+  // on one account; or, with key_order "sequential", they are used in order. A key that failed for an account reason in this run is not started on again
   // while another key of the slot has not.
   // Own-provider state only: cross routes use pickedKey(provider) and the
   // `if (crossing) continue` below prevents them from writing these sets.
@@ -633,7 +633,13 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
     const configured = (lane?.last_resort?.provider === provider ? lane.last_resort.key_weights : lane?.key_weights) ?? [];
     return credentialsFor(laneId, provider).keys.map((_, index) => configured[index] ?? 1);
   };
+  // A lane with key_order "sequential" does not split: every PR starts on its own provider's first key.
+  const inOrder = (laneId, provider) => {
+    const lane = lanes.find((candidate) => candidate.id === laneId);
+    return lane?.key_order === 'sequential' && (provider ?? lane.provider) === lane.provider;
+  };
   function pickedKey(laneId, provider) {
+    if (inOrder(laneId, provider)) return 0;
     const weights = weightsOf(laneId, provider);
     let rest = (Math.abs(Number(pullNumber)) || 0) % weights.reduce((sum, weight) => sum + weight, 0);
     return Math.max(0, weights.findIndex((weight) => (rest -= weight) < 0));
@@ -929,7 +935,7 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
     }
     const keyCount = credentials.keys.length;
     if (keyCount > 1) {
-      console.log(`[Lane ${lane.id}] the secret slot holds ${keyCount} keys, weights ${weightsOf(lane.id).join(':')}; PR #${pullNumber} starts on key ${pickedKey(lane.id) + 1}.`);
+      console.log(`[Lane ${lane.id}] the secret slot holds ${keyCount} keys, ${inOrder(lane.id) ? 'used in order' : `weights ${weightsOf(lane.id).join(':')}`}; PR #${pullNumber} starts on key ${pickedKey(lane.id) + 1}.`);
     }
     const tried = [];
     let lastResponse;

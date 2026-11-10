@@ -80,6 +80,7 @@
       "provider": "openai",
       "protocol": "openai-responses",
       "advisory": true,
+      "key_order": "sequential",
       "request_timeout_ms": 900000,
       "model_budget_ms": 900000,
       "primary": {

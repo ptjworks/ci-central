@@ -205,6 +205,12 @@ var require_index = __commonJS({
         if (lane.key_weights !== void 0 && (!Array.isArray(lane.key_weights) || lane.key_weights.length < 2 || lane.key_weights.length > 4 || lane.key_weights.some((weight) => !Number.isInteger(weight) || weight < 1 || weight > 100))) {
           throw new Error(`${location}.key_weights must be an array of 2 to 4 integers from 1 to 100.`);
         }
+        if (lane.key_order !== void 0 && lane.key_order !== "sequential") {
+          throw new Error(`${location}.key_order must be "sequential" when configured.`);
+        }
+        if (lane.key_order !== void 0 && lane.key_weights !== void 0) {
+          throw new Error(`${location}.key_order cannot be combined with key_weights.`);
+        }
         if (!ALLOWED_PROTOCOLS.has(lane.protocol)) throw new Error(`${location}.protocol is not supported.`);
         for (const field of ["request_timeout_ms", "model_budget_ms"]) {
           if (lane[field] !== void 0 && (!Number.isInteger(lane[field]) || lane[field] < 1)) {
@@ -1885,7 +1891,12 @@ ${requestError || ""}`;
     const configured = (lane?.last_resort?.provider === provider ? lane.last_resort.key_weights : lane?.key_weights) ?? [];
     return credentialsFor(laneId, provider).keys.map((_, index) => configured[index] ?? 1);
   };
+  const inOrder = (laneId, provider) => {
+    const lane = lanes.find((candidate) => candidate.id === laneId);
+    return lane?.key_order === "sequential" && (provider ?? lane.provider) === lane.provider;
+  };
   function pickedKey(laneId, provider) {
+    if (inOrder(laneId, provider)) return 0;
     const weights = weightsOf(laneId, provider);
     let rest = (Math.abs(Number(pullNumber)) || 0) % weights.reduce((sum, weight) => sum + weight, 0);
     return Math.max(0, weights.findIndex((weight) => (rest -= weight) < 0));
@@ -2168,7 +2179,7 @@ ${requestError || ""}`;
     }
     const keyCount = credentials.keys.length;
     if (keyCount > 1) {
-      console.log(`[Lane ${lane.id}] the secret slot holds ${keyCount} keys, weights ${weightsOf(lane.id).join(":")}; PR #${pullNumber} starts on key ${pickedKey(lane.id) + 1}.`);
+      console.log(`[Lane ${lane.id}] the secret slot holds ${keyCount} keys, ${inOrder(lane.id) ? "used in order" : `weights ${weightsOf(lane.id).join(":")}`}; PR #${pullNumber} starts on key ${pickedKey(lane.id) + 1}.`);
     }
     const tried = [];
     let lastResponse;

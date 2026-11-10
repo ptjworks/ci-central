@@ -277,6 +277,31 @@ for (const loader of [source, bundled]) {
       `key_weights ${JSON.stringify(weights)} must be rejected`);
   }
 }
+// Two OpenAI accounts share NebulaLab's Lane C slot (the owner's decision, 2026-11-10). They are
+// used in order, not split: every PR starts on the first key, so one account's prompt cache serves
+// them all, and the second key only takes a request the first could not serve for an account reason.
+assert.equal(nebula.lanes[2].key_order, 'sequential', 'NebulaLab Lane C uses its OpenAI keys in order');
+for (const repository of repositories) {
+  const config = source.loadConfig(repository, actionPath);
+  assert.ok(config.lanes.every((lane) => lane.key_order === undefined || (repository === 'TshyGO/NebulaLab' && lane.id === 'C')),
+    `${repository} only NebulaLab's Lane C uses its keys in order`);
+}
+for (const loader of [source, bundled]) {
+  for (const order of ['split', 'Sequential', '', true, 1, ['sequential'], null]) {
+    const config = structuredClone(nebula);
+    config.lanes[2].key_order = order;
+    assert.throws(() => loader.validateConfig(config, 'TshyGO/NebulaLab'), /lanes\[2\]\.key_order must be "sequential" when configured/,
+      `key_order ${JSON.stringify(order)} must be rejected`);
+  }
+  // In order or in proportion, never both: a weight would have no PR to place.
+  const both = structuredClone(nebula);
+  both.lanes[1].key_order = 'sequential';
+  assert.throws(() => loader.validateConfig(both, 'TshyGO/NebulaLab'), /lanes\[1\]\.key_order cannot be combined with key_weights/);
+  const plain = structuredClone(nebula);
+  delete plain.lanes[1].key_weights;
+  plain.lanes[1].key_order = 'sequential';
+  assert.doesNotThrow(() => loader.validateConfig(plain, 'TshyGO/NebulaLab'), 'a plain multi-key slot may use its keys in order');
+}
 
 // A first pass is validated like any lane model, stays on the lane's own provider, and cannot
 // share an id with the models that follow it.
