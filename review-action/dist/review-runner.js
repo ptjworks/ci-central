@@ -65,7 +65,7 @@ var require_index = __commonJS({
       last_resort: 'a routes entry with "when": "plans_spent"',
       key_weights: "keys used in order",
       key_order: "keys used in order",
-      resend_unserved: "nothing (removed)"
+      resend_unserved: null
     };
     var LANE_FIELDS = /* @__PURE__ */ new Set(["id", "advisory", "protocol", "request_timeout_ms", "model_budget_ms", "first_pass", "model", "routes"]);
     var PLAN_PROVIDERS = ["command-code", "opencode-go"];
@@ -208,7 +208,9 @@ var require_index = __commonJS({
       for (const [index, lane] of config.lanes.entries()) {
         const location = `lanes[${index}]`;
         for (const field of Object.keys(lane)) {
-          if (Object.hasOwn(RETIRED_LANE_FIELDS, field)) throw new Error(`${location}.${field} was replaced by ${RETIRED_LANE_FIELDS[field]} in schema 2.`);
+          if (Object.hasOwn(RETIRED_LANE_FIELDS, field)) {
+            throw new Error(`${location}.${field} was ${RETIRED_LANE_FIELDS[field] ? `replaced by ${RETIRED_LANE_FIELDS[field]}` : "removed"} in schema 2.`);
+          }
           if (!LANE_FIELDS.has(field)) throw new Error(`${location}.${field} is not a lane field.`);
         }
         if (lane.advisory !== void 0 && typeof lane.advisory !== "boolean") throw new Error(`${location}.advisory must be a boolean.`);
@@ -2120,7 +2122,7 @@ ${requestError || ""}`;
         review: [
           "> AI review was not generated.",
           "",
-          credentials?.invalid ? `Lane ${lane.id} credential format is invalid; this slot and its cross routes are disabled.` : `Lane ${lane.id} is not provisioned.`,
+          credentials?.invalid ? `Lane ${lane.id} credential format is invalid; the lane does not run until its slot is fixed.` : `Lane ${lane.id} is not provisioned.`,
           "",
           `Action needed: set PR_AGENT_LANE_${lane.id}_KEY and PR_AGENT_LANE_${lane.id}_API_BASE in the caller repository.`
         ].join("\n")
@@ -2364,7 +2366,7 @@ ${fence}
     const prior = isFirstPass ? null : priorFirstPass(lane);
     const modelLine = crossLabel ? `Lane ${lane.id}: ${servedModelId} via ${servedVia.provider} (${servedBy.id} on ${ownProvider(lane)} unavailable)` : `Lane ${lane.id}: ${servedBy?.id ?? laneModel.id}${isFirstPass ? " (first pass)" : ""}${viaText}`;
     const banner = [
-      ...servedVia?.lastResort ? [`> \u2139\uFE0F Lane ${lane.id} \u7684\u4E24\u5BB6\u5957\u9910\u989D\u5EA6\u90FD\u5DF2\u7528\u5B8C\uFF08${result.lastResortReason}\uFF09\uFF0C\u672C\u6761 review \u7531\u6700\u540E\u515C\u5E95 \`${servedBy.label}\` \u7ECF \`${servedVia.provider}\`\uFF08Lane ${lane.id} \u7684\u56FA\u5B9A Secret \u69FD\u4F4D\uFF09\u751F\u6210\u3002`] : servedVia ? [`> \u2139\uFE0F Lane ${lane.id} \u7684 \`${servedBy.label}\` \u5728 \`${ownProvider(lane)}\` \u4E0A\u672A\u4EA7\u751F\u53EF\u7528\u5BA1\u6838${result.ownQuota ? `\uFF08${result.ownQuota.banner}\uFF09` : ""}\uFF0C\u672C\u6761 review \u7531${crossLabel ? `\u515C\u5E95\u6A21\u578B \`${crossLabel}\` ` : "\u540C\u4E00\u6A21\u578B"}\u7ECF \`${servedVia.provider}\`\uFF08Lane ${servedVia.credentialLane} \u7684\u56FA\u5B9A Secret \u69FD\u4F4D\uFF09\u751F\u6210\u3002`] : [],
+      ...servedVia?.lastResort ? [`> \u2139\uFE0F Lane ${lane.id} \u7684\u4E24\u5BB6\u5957\u9910\u989D\u5EA6\u90FD\u5DF2\u7528\u5B8C\uFF08${result.lastResortReason}\uFF09\uFF0C\u672C\u6761 review \u7531\u6700\u540E\u515C\u5E95 \`${servedBy.label}\` \u7ECF \`${servedVia.provider}\`\uFF08Lane ${servedVia.credentialLane} \u7684\u56FA\u5B9A Secret \u69FD\u4F4D\uFF09\u751F\u6210\u3002`] : servedVia ? [`> \u2139\uFE0F Lane ${lane.id} \u7684 \`${servedBy.label}\` \u5728 \`${ownProvider(lane)}\` \u4E0A\u672A\u4EA7\u751F\u53EF\u7528\u5BA1\u6838${result.ownQuota ? `\uFF08${result.ownQuota.banner}\uFF09` : ""}\uFF0C\u672C\u6761 review \u7531${crossLabel ? `\u515C\u5E95\u6A21\u578B \`${crossLabel}\` ` : "\u540C\u4E00\u6A21\u578B"}\u7ECF \`${servedVia.provider}\`\uFF08Lane ${servedVia.credentialLane} \u7684\u56FA\u5B9A Secret \u69FD\u4F4D\uFF09\u751F\u6210\u3002`] : [],
       ...servedKey?.from ? [`> \u2139\uFE0F Lane ${lane.id} \u7684\u7B2C ${servedKey.from.index + 1} \u628A key \u672A\u80FD\u670D\u52A1\uFF08${servedKey.from.reason}\uFF09\uFF0C\u672C\u6761 review \u7531\u540C\u4E00\u6A21\u578B\u7ECF\u540C\u4E00 Secret \u69FD\u4F4D\u7684\u7B2C ${servedKey.index + 1} \u628A key \u751F\u6210\u3002`] : []
     ];
     if (isFirstPass) {

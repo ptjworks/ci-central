@@ -49,11 +49,12 @@ foreach ($repository in $Repositories) {
         continue
     }
     $slot = @((Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json).key_slots.$Lane)
-    if ($slot.Count -gt 1) { $bundled += $repository }
+    if ($slot.Count -eq 0) { $unknown += $repository }
+    elseif ($slot.Count -gt 1) { $bundled += $repository }
     elseif ($slot.Count -eq 1 -and $slot[0] -in @('anthropic', 'openai')) { $multiKey += $repository }
 }
 if ($unknown) {
-    throw "No central config in review-action/config/repositories for $($unknown -join ', '), so its Lane $Lane slot format is unknown. No secrets were written."
+    throw "No central config in review-action/config/repositories names the Lane $Lane slot (key_slots.$Lane) for $($unknown -join ', '), so its format is unknown. No secrets were written."
 }
 if ($bundled) {
     throw "Lane $Lane uses a version-1 provider credential bundle in $($bundled -join ', '). This script writes a plain key and would disable it. Leave those repositories out with -Repositories and update their bundle as docs/nebulalab-openai-c-migration.md describes. No secrets were written."

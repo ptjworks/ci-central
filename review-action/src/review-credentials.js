@@ -57,8 +57,8 @@ function readCredentials(keySlots, env, maskSecret = () => {}) {
         profiles.set(providers[0], credential(key, base));
       }
     } catch {
-      // A bad slot disables only the routes that use it. Independent lanes may still meet the
-      // quorum; no profile may borrow a different provider's key.
+      // A bad slot stops the lane that owns it and skips other lanes' routes through it.
+      // Independent lanes may still meet the quorum; no profile may borrow a different provider's key.
       profiles.clear();
       for (const provider of providers) {
         profiles.set(provider, { apiKey: undefined, keys: [], baseUrl: '', invalid: true });

@@ -961,7 +961,7 @@ const staleResendConfig = structuredClone(centralConfig);
 staleResendConfig.lanes[2].resend_unserved = true;
 r = await scenario(healthy, { PR_REVIEW_CONFIG: JSON.stringify(staleResendConfig) });
 check('resend_unserved is rejected as removed in schema 2', r.captured.length === 0
-  && /lanes\[2\]\.resend_unserved was replaced by nothing \(removed\) in schema 2/.test(r.error?.message || ''));
+  && /lanes\[2\]\.resend_unserved was removed in schema 2/.test(r.error?.message || ''));
 check('no repository profile resends on the same provider', fs.readdirSync(path.join(here, '..', 'review-action', 'config', 'repositories'))
   .every((name) => JSON.parse(fs.readFileSync(path.join(here, '..', 'review-action', 'config', 'repositories', name), 'utf8'))
     .lanes.every((lane) => lane.resend_unserved === undefined)));

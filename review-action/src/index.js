@@ -58,7 +58,7 @@ function validateModel(model, location) {
 const RETIRED_LANE_FIELDS = {
   provider: 'routes[0].provider', credential_providers: 'key_slots', primary: 'model', fallbacks: 'routes',
   last_resort: 'a routes entry with "when": "plans_spent"', key_weights: 'keys used in order', key_order: 'keys used in order',
-  resend_unserved: 'nothing (removed)',
+  resend_unserved: null,
 };
 const LANE_FIELDS = new Set(['id', 'advisory', 'protocol', 'request_timeout_ms', 'model_budget_ms', 'first_pass', 'model', 'routes']);
 // The plans a paid API sits behind, and the protocols each paid API serves.
@@ -221,7 +221,9 @@ function validateConfig(config, repository) {
   for (const [index, lane] of config.lanes.entries()) {
     const location = `lanes[${index}]`;
     for (const field of Object.keys(lane)) {
-      if (Object.hasOwn(RETIRED_LANE_FIELDS, field)) throw new Error(`${location}.${field} was replaced by ${RETIRED_LANE_FIELDS[field]} in schema 2.`);
+      if (Object.hasOwn(RETIRED_LANE_FIELDS, field)) {
+        throw new Error(`${location}.${field} was ${RETIRED_LANE_FIELDS[field] ? `replaced by ${RETIRED_LANE_FIELDS[field]}` : 'removed'} in schema 2.`);
+      }
       if (!LANE_FIELDS.has(field)) throw new Error(`${location}.${field} is not a lane field.`);
     }
     if (lane.advisory !== undefined && typeof lane.advisory !== 'boolean') throw new Error(`${location}.advisory must be a boolean.`);

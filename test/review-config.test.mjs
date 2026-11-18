@@ -247,7 +247,7 @@ for (const loader of [source, bundled]) {
     ['last_resort', { provider: 'openai', primary: nebula.lanes[2].model }]]) {
     const config = structuredClone(nebula);
     config.lanes[2][field] = value;
-    assert.throws(() => loader.validateConfig(config, 'TshyGO/NebulaLab'), new RegExp(`lanes\\[2\\]\\.${field} was replaced by .* in schema 2`), field);
+    assert.throws(() => loader.validateConfig(config, 'TshyGO/NebulaLab'), new RegExp(`lanes\\[2\\]\\.${field} was (replaced by .*|removed) in schema 2`), field);
   }
   const unknownField = structuredClone(nebula);
   unknownField.lanes[0].routing = 'any';

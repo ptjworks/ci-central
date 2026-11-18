@@ -870,7 +870,9 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
     const [first, ...rest] = lane.routes;
     const later = rest.filter((route) => !route.when);
     const paid = rest.find((route) => route.when === 'plans_spent');
-    // Without its own slot the lane does not run, whichever slots its routes use.
+    // Without its own slot the lane does not run, whichever slots its routes use. A broken own slot
+    // stops the lane too, even when an earlier route uses another slot: that slot also holds the
+    // lane's later and paid routes, so the lane says so at once instead of losing them unseen.
     const credentials = credentialsFor(lane.id, reviewConfig.key_slots[lane.id][0]);
     if (!chain.some((current) => hasMaterial(contextFor(current, lane.id).pack))) {
       return { lane, servedBy: null, reasoningLength: 0, status: 'diagnostic',
@@ -886,7 +888,7 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
         review: [
           '> AI review was not generated.',
           '',
-          credentials?.invalid ? `Lane ${lane.id} credential format is invalid; this slot and its cross routes are disabled.` : `Lane ${lane.id} is not provisioned.`,
+          credentials?.invalid ? `Lane ${lane.id} credential format is invalid; the lane does not run until its slot is fixed.` : `Lane ${lane.id} is not provisioned.`,
           '',
           `Action needed: set PR_AGENT_LANE_${lane.id}_KEY and PR_AGENT_LANE_${lane.id}_API_BASE in the caller repository.`,
         ].join('\n'),
@@ -1184,7 +1186,7 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
       ? `Lane ${lane.id}: ${servedModelId} via ${servedVia.provider} (${servedBy.id} on ${ownProvider(lane)} unavailable)`
       : `Lane ${lane.id}: ${servedBy?.id ?? laneModel.id}${isFirstPass ? ' (first pass)' : ''}${viaText}`;
     const banner = [
-      ...(servedVia?.lastResort ? [`> ℹ️ Lane ${lane.id} 的两家套餐额度都已用完（${result.lastResortReason}），本条 review 由最后兜底 \`${servedBy.label}\` 经 \`${servedVia.provider}\`（Lane ${lane.id} 的固定 Secret 槽位）生成。`]
+      ...(servedVia?.lastResort ? [`> ℹ️ Lane ${lane.id} 的两家套餐额度都已用完（${result.lastResortReason}），本条 review 由最后兜底 \`${servedBy.label}\` 经 \`${servedVia.provider}\`（Lane ${servedVia.credentialLane} 的固定 Secret 槽位）生成。`]
         : servedVia ? [`> ℹ️ Lane ${lane.id} 的 \`${servedBy.label}\` 在 \`${ownProvider(lane)}\` 上未产生可用审核${result.ownQuota ? `（${result.ownQuota.banner}）` : ''}，本条 review 由${crossLabel ? `兜底模型 \`${crossLabel}\` ` : '同一模型'}经 \`${servedVia.provider}\`（Lane ${servedVia.credentialLane} 的固定 Secret 槽位）生成。`] : []),
       ...(servedKey?.from ? [`> ℹ️ Lane ${lane.id} 的第 ${servedKey.from.index + 1} 把 key 未能服务（${servedKey.from.reason}），本条 review 由同一模型经同一 Secret 槽位的第 ${servedKey.index + 1} 把 key 生成。`] : []),
     ];
