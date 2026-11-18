@@ -2373,24 +2373,34 @@ const openaiEgress = { ...twEgress, PR_REVIEW_CONFIG: JSON.stringify(nebulaConfi
   LANE_C_API_BASE: providerBundle({ openai: 'https://lane-c.openai.example.test/v1', 'command-code': 'https://lane-c.cc.example.test/v1' }) };
 const laneCBody = (result) => result.posted.find((body) => body.startsWith('<!-- ai-pr-review-bot:lane-C -->')) || '';
 const laneCCalls = (result) => result.captured.filter((call) => call.lane === 'C' || (call.lane === 'A' && call.model === 'gpt-6-luna'));
+const nebulaCFirstPassMark = (model) => `<!-- ai-pr-review-first-pass:v1 lane=C head=${H1} model=${model} -->`;
 r = await scenario(healthy, openaiEgress, atHead(H1, { useBundle: true }));
 const solFirst = laneCBody(r);
 check('NebulaLab C: GPT-6.2 Sol alone performs the first pass on OpenAI with high reasoning', !r.error
   && laneCCalls(r).length === 1 && laneCCalls(r)[0].model === 'gpt-6.2-sol'
   && laneCCalls(r)[0].body.reasoning?.effort === 'high'
   && laneCCalls(r)[0].headers.authorization === 'Bearer openai-test-key'
-  && solFirst.includes(`ai-pr-review-first-pass:v1 lane=C head=${H1} model=gpt-6.2-sol`)
+  && solFirst.includes(nebulaCFirstPassMark('gpt-6.2-sol'))
   && solFirst.includes('GPT-6.2 Sol') && solFirst.includes('status=valid'));
-for (const model of ['gpt-6.2-sol', 'gpt-6.1-sol']) {
-  const firstPass = model === 'gpt-6.2-sol' ? solFirst
-    : solFirst.replaceAll('gpt-6.2-sol', model).replaceAll('GPT-6.2 Sol', 'GPT-6.1 Sol');
+const historicalCFirstPass = (model) => [
+  '<!-- ai-pr-review-bot:lane-C -->',
+  nebulaCFirstPassMark(model),
+  `Historical review by ${model}`,
+  '<!-- /ai-pr-review-first-pass:v1 -->',
+].join('\n');
+for (const [model, firstPass] of [
+  ['gpt-6.2-sol', solFirst],
+  ['gpt-6.1-sol', historicalCFirstPass('gpt-6.1-sol')],
+  ['gpt-6.1-terra', historicalCFirstPass('gpt-6.1-terra')],
+]) {
   r = await scenario(healthy, openaiEgress, atHead(H2, { useBundle: true,
     files: [patch('src/a.ts', 101), patch('tests/a.test.ts', 100)], comments: [{ body: firstPass }] }));
   check(`NebulaLab C: subsequent heads use Terra high on OpenAI and preserve the ${model} first pass`, !r.error
     && laneCCalls(r).map((call) => call.model).join(',') === 'gpt-6.1-terra'
     && laneCCalls(r)[0].headers.authorization === 'Bearer openai-test-key'
     && laneCCalls(r)[0].body.reasoning?.effort === 'high'
-    && laneCBody(r).includes(`ai-pr-review-first-pass:v1 lane=C head=${H1} model=${model}`));
+    && laneCBody(r).includes(`${nebulaCFirstPassMark(model)}\n`)
+    && (model === 'gpt-6.2-sol' || laneCBody(r).includes(`\nHistorical review by ${model}\n`)));
 }
 const openaiUnavailable = (call) => call.url.startsWith('https://lane-c.openai.');
 const lunaOnLaneAGo = (call) => call.lane === 'A' && call.model === 'gpt-6-luna';

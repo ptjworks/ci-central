@@ -208,9 +208,9 @@ const inputTokenRoom = {
   'gpt-6-luna': 1000000,
   'gpt-6.1-sol': 1000000,
   'gpt-6.1-terra': 1050000,
-  'gpt-6.2-sol': 922000, // Published input limit, with up to 128K output in a 1.05M-token window.
+  'gpt-6.2-sol': 1050000,
 };
-const sharesWindowWithOutput = new Set(['kimi-k2.7-code', 'claude-haiku-5-5', 'claude-sonnet-5-5', 'tencent/hy3-paid', 'z-ai/glm-5.3-flash', 'moonshotai/Kimi-K2.7-Code', 'gpt-6-luna', 'gpt-6.1-sol', 'gpt-6.1-terra']);
+const sharesWindowWithOutput = new Set(['kimi-k2.7-code', 'claude-haiku-5-5', 'claude-sonnet-5-5', 'tencent/hy3-paid', 'z-ai/glm-5.3-flash', 'moonshotai/Kimi-K2.7-Code', 'gpt-6-luna', 'gpt-6.1-sol', 'gpt-6.1-terra', 'gpt-6.2-sol']);
 for (const repository of repositories) {
   const config = source.loadConfig(repository, actionPath);
   const policy = config.review_policy;
@@ -230,9 +230,14 @@ for (const repository of repositories) {
     for (const model of [...(lane.first_pass ? [lane.first_pass] : []), lane.primary, ...lane.fallbacks,
       ...(lane.last_resort ? [lane.last_resort.first_pass, lane.last_resort.primary].filter(Boolean) : [])]) {
       const diffChars = model.diff_char_budget ?? policy.diff_char_budget;
+      const inputTokens = (diffChars + promptChars) / WORST_CHARS_PER_TOKEN;
       const sharedOutput = sharesWindowWithOutput.has(model.id) ? model.max_output_tokens : 0;
-      assert.ok((diffChars + promptChars) / WORST_CHARS_PER_TOKEN + sharedOutput <= inputTokenRoom[model.id],
+      assert.ok(inputTokens + sharedOutput <= inputTokenRoom[model.id],
         `${repository} Lane ${lane.id} ${model.id} context budget can exceed its model window`);
+      if (model.id === 'gpt-6.2-sol') {
+        assert.ok(inputTokens <= 922000 && model.max_output_tokens <= 128000,
+          `${repository} Lane ${lane.id} ${model.id} exceeds its separate input or output limit`);
+      }
       // The cross-provider fallback resends the same prompt, so it must fit the target model's window too.
       for (const { id: crossId } of [].concat(model.cross_provider ?? [])) {
         const crossOutput = sharesWindowWithOutput.has(crossId) ? model.max_output_tokens : 0;
