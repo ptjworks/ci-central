@@ -158,7 +158,7 @@ test('replies are the author’s and members’ words after the review, never bo
   assert.ok(many.omitted > 0);
 });
 
-const lane = { id: 'A', primary: { id: 'muse-spark-1.3-contributor' }, fallbacks: [] };
+const lane = { id: 'A', model: { id: 'muse-spark-1.3-contributor' }, routes: [{ provider: 'opencode-go' }] };
 const plan = (overrides = {}) => planLane({ lane, state: state(), evidence: { head: older, status: 'valid', workflow }, base: 'main',
   head, fingerprint: 'd'.repeat(64), promptVersion: 'review-contract-v1', manual: false, firstPassDue: false, ...overrides });
 test('an unchanged PR-own diff skips the model only when the visible evidence is that valid review', () => {

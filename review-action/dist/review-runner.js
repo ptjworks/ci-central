@@ -18,7 +18,6 @@ var require_index = __commonJS({
     var ANTHROPIC_EFFORTS = /* @__PURE__ */ new Set(["low", "medium", "high", "xhigh", "max"]);
     var ALLOWED_LANES = /* @__PURE__ */ new Set(["A", "B", "C"]);
     var BUNDLE_PROVIDERS = /* @__PURE__ */ new Set(["openai", "command-code", "opencode-go", "anthropic"]);
-    var LAST_RESORT_PROVIDERS = /* @__PURE__ */ new Set(["anthropic", "openai"]);
     function configFileName(repository) {
       const parts = (repository || "").split("/");
       if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository || "") || parts.some((part) => part === "." || part === ".." || part.includes(".."))) {
@@ -58,31 +57,23 @@ var require_index = __commonJS({
         throw new Error(`${location}.protocol is not supported.`);
       }
     }
-    function validateCrossProvider(config, lane, cross, protocol, location) {
-      if (!cross || typeof cross !== "object" || Array.isArray(cross) || Object.keys(cross).some((key) => !["credential_lane", "credential_provider", "id", "label"].includes(key))) {
-        throw new Error(`${location} must be an object with only credential_lane and id, optionally credential_provider and label.`);
-      }
-      if (typeof cross.id !== "string" || !cross.id.trim()) {
-        throw new Error(`${location}.id must be a non-empty string.`);
-      }
-      if (cross.label !== void 0 && (typeof cross.label !== "string" || !cross.label.trim())) {
-        throw new Error(`${location}.label must be a non-empty string.`);
-      }
-      const target = config.lanes.find((candidate) => candidate?.id === cross.credential_lane);
-      if (!target || cross.credential_lane === lane.id && cross.credential_provider === void 0) {
-        throw new Error(`${location}.credential_lane must name another configured lane.`);
-      }
-      const provider = cross.credential_provider ?? target.provider;
-      if (cross.credential_provider !== void 0 && !target.credential_providers?.includes(cross.credential_provider)) {
-        throw new Error(`${location}.credential_provider must name a configured provider in the target slot.`);
-      }
-      if (typeof provider !== "string" || provider === lane.provider) {
-        throw new Error(`${location} must use a provider other than the lane's own.`);
-      }
-      if (protocol === "google-generate-content") {
-        throw new Error(`${location} is not supported by google-generate-content.`);
-      }
-      return provider;
+    var RETIRED_LANE_FIELDS = {
+      provider: "routes[0].provider",
+      credential_providers: "key_slots",
+      primary: "model",
+      fallbacks: "routes",
+      last_resort: 'a routes entry with "when": "plans_spent"',
+      key_weights: "keys used in order",
+      key_order: "keys used in order",
+      resend_unserved: "nothing (removed)"
+    };
+    var LANE_FIELDS = /* @__PURE__ */ new Set(["id", "advisory", "protocol", "request_timeout_ms", "model_budget_ms", "first_pass", "model", "routes"]);
+    var PLAN_PROVIDERS = ["command-code", "opencode-go"];
+    var NATIVE_PROTOCOLS = { anthropic: ["anthropic-messages"], openai: ["openai-responses", "openai-chat-completions"] };
+    function keySlotFor2(config, laneId, provider) {
+      const slots = config.key_slots || {};
+      if (slots[laneId]?.includes(provider)) return laneId;
+      return ["A", "B", "C"].find((id) => slots[id]?.includes(provider));
     }
     function validateModelOptions(config, lane, model, location) {
       const protocol = model.protocol ?? lane.protocol;
@@ -99,15 +90,8 @@ var require_index = __commonJS({
       if (model.temperature !== void 0 && protocol === "anthropic-messages") {
         throw new Error(`${location}.temperature is not supported by anthropic-messages.`);
       }
-      if (model.quota_overflow !== void 0) {
-        throw new Error(`${location}.quota_overflow was replaced by cross_provider.`);
-      }
-      if (Array.isArray(model.cross_provider)) {
-        if (model.cross_provider.length !== 2) throw new Error(`${location}.cross_provider must list exactly two routes.`);
-        const providers = model.cross_provider.map((route, index) => validateCrossProvider(config, lane, route, protocol, `${location}.cross_provider[${index}]`));
-        if (new Set(providers).size !== providers.length) throw new Error(`${location}.cross_provider must list distinct providers.`);
-      } else if (model.cross_provider !== void 0) {
-        validateCrossProvider(config, lane, model.cross_provider, protocol, `${location}.cross_provider`);
+      for (const field of ["cross_provider", "quota_overflow"]) {
+        if (model[field] !== void 0) throw new Error(`${location}.${field} was replaced by the lane's routes.`);
       }
       if (model.thinking_level === void 0) return;
       if (protocol !== "google-generate-content") {
@@ -117,51 +101,76 @@ var require_index = __commonJS({
         throw new Error(`${location}.thinking_level is not supported.`);
       }
     }
-    function validateLastResort(config, lane, location) {
-      const last = lane.last_resort;
-      if (!last || typeof last !== "object" || Array.isArray(last) || Object.keys(last).some((key) => !["provider", "key_weights", "first_pass", "primary"].includes(key))) {
-        throw new Error(`${location}.last_resort must be an object with provider and primary, optionally key_weights and first_pass.`);
+    function validateKeySlots(config) {
+      const slots = config.key_slots;
+      if (!slots || typeof slots !== "object" || Array.isArray(slots)) throw new Error("key_slots must map each lane id to its slot providers.");
+      const laneIds = config.lanes.map((lane) => lane?.id);
+      if (Object.keys(slots).sort().join(",") !== [...laneIds].sort().join(",")) {
+        throw new Error("key_slots must name exactly the configured lanes.");
       }
-      if (!LAST_RESORT_PROVIDERS.has(last.provider) || last.provider === lane.provider || !lane.credential_providers?.includes(last.provider)) {
-        throw new Error(`${location}.last_resort.provider must be anthropic or openai, configured as the second provider of the lane's own slot.`);
-      }
-      const cross = lane.primary.cross_provider;
-      if (Array.isArray(cross)) throw new Error(`${location}.last_resort requires exactly one cross_provider route.`);
-      const crossProvider = cross && (cross.credential_provider ?? config.lanes.find((candidate) => candidate?.id === cross.credential_lane)?.provider);
-      if (!crossProvider || crossProvider === last.provider) {
-        throw new Error(`${location}.last_resort needs a primary cross_provider route on another plan provider; it serves only when both are spent.`);
-      }
-      if ([lane.provider, crossProvider].sort().join(",") !== "command-code,opencode-go") {
-        throw new Error(`${location}.last_resort serves only behind opencode-go and command-code: the primary and its cross_provider route must be those two plans.`);
-      }
-      if (lane.fallbacks.length || lane.first_pass !== void 0) {
-        throw new Error(`${location}.last_resort needs a lane without fallbacks or first_pass; its gate judges the primary's two routes alone.`);
-      }
-      if (last.key_weights !== void 0 && (!Array.isArray(last.key_weights) || last.key_weights.length < 2 || last.key_weights.length > 4 || last.key_weights.some((weight) => !Number.isInteger(weight) || weight < 1 || weight > 100))) {
-        throw new Error(`${location}.last_resort.key_weights must be an array of 2 to 4 integers from 1 to 100.`);
-      }
-      const entries = [
-        [last.primary, `${location}.last_resort.primary`],
-        ...last.first_pass === void 0 ? [] : [[last.first_pass, `${location}.last_resort.first_pass`]]
-      ];
-      const nativeProtocols = { anthropic: ["anthropic-messages"], openai: ["openai-responses", "openai-chat-completions"] }[last.provider];
-      for (const [model, modelLocation] of entries) {
-        validateModel(model, modelLocation);
-        if (model.cross_provider !== void 0) throw new Error(`${modelLocation} cannot configure cross_provider; the last resort never crosses.`);
-        if (!nativeProtocols.includes(model.protocol ?? lane.protocol)) {
-          throw new Error(`${modelLocation} must use a protocol ${last.provider} serves (${nativeProtocols.join(" or ")}); set protocol when the lane's differs.`);
+      for (const [id, providers] of Object.entries(slots)) {
+        if (!Array.isArray(providers) || providers.length < 1 || providers.length > 2 || new Set(providers).size !== providers.length || providers.some((provider) => typeof provider !== "string" || !provider.trim()) || providers.length === 2 && providers.some((provider) => !BUNDLE_PROVIDERS.has(provider))) {
+          throw new Error(`key_slots.${id} must list one provider, or two of openai, command-code, opencode-go and anthropic for a bundle.`);
         }
-        validateModelOptions(config, lane, model, modelLocation);
       }
-      if (last.first_pass !== void 0 && last.first_pass.id === last.primary.id) {
-        throw new Error(`${location}.last_resort.first_pass must name a model other than its primary.`);
-      }
+    }
+    function validateRoutes(config, lane, location) {
+      const routes = lane.routes;
+      if (!Array.isArray(routes) || routes.length < 1 || routes.length > 3) throw new Error(`${location}.routes must list one to three providers.`);
+      const protocol = lane.model.protocol ?? lane.protocol;
+      routes.forEach((route, index) => {
+        const at = `${location}.routes[${index}]`;
+        if (!route || typeof route !== "object" || Array.isArray(route)) throw new Error(`${at} must be an object.`);
+        const gated = route.when !== void 0;
+        const allowed = gated ? ["provider", "when", "model", "first_pass"] : index === 0 ? ["provider"] : ["provider", "id", "label"];
+        if (Object.keys(route).some((key) => !allowed.includes(key))) {
+          throw new Error(`${at} may only set ${allowed.join(", ")}.`);
+        }
+        if (typeof route.provider !== "string" || !route.provider.trim()) throw new Error(`${at}.provider must be non-empty.`);
+        if (!keySlotFor2(config, lane.id, route.provider)) throw new Error(`${at}.provider ${route.provider} is not in any key slot.`);
+        for (const field of ["id", "label"]) {
+          if (route[field] !== void 0 && (typeof route[field] !== "string" || !route[field].trim())) {
+            throw new Error(`${at}.${field} must be a non-empty string.`);
+          }
+        }
+        if (index > 0 && !gated && protocol === "google-generate-content") {
+          throw new Error(`${at} is not supported by google-generate-content.`);
+        }
+        if (!gated) return;
+        if (route.when !== "plans_spent") throw new Error(`${at}.when must be "plans_spent".`);
+        if (index !== routes.length - 1 || !NATIVE_PROTOCOLS[route.provider]) {
+          throw new Error(`${at} must be the last route and a paid API (anthropic or openai).`);
+        }
+        if (routes.slice(0, index).map((earlier) => earlier.provider).sort().join(",") !== PLAN_PROVIDERS.join(",")) {
+          throw new Error(`${at} serves only behind opencode-go and command-code: the routes before it must be those two plans.`);
+        }
+        if (lane.first_pass !== void 0) {
+          throw new Error(`${at} needs a lane without first_pass; its gate judges the plan routes alone.`);
+        }
+        const served = route.model ?? lane.model;
+        const entries = [
+          [served, route.model ? `${at}.model` : `${location}.model`],
+          ...route.first_pass === void 0 ? [] : [[route.first_pass, `${at}.first_pass`]]
+        ];
+        for (const [model, modelLocation] of entries) {
+          validateModel(model, modelLocation);
+          if (!NATIVE_PROTOCOLS[route.provider].includes(model.protocol ?? lane.protocol)) {
+            throw new Error(`${modelLocation} must use a protocol ${route.provider} serves (${NATIVE_PROTOCOLS[route.provider].join(" or ")}); set protocol when the lane's differs.`);
+          }
+          validateModelOptions(config, lane, model, modelLocation);
+        }
+        if (route.first_pass !== void 0 && route.first_pass.id === served.id) {
+          throw new Error(`${at}.first_pass must name a model other than the model it leads.`);
+        }
+      });
+      const providers = routes.map((route) => route.provider);
+      if (new Set(providers).size !== providers.length) throw new Error(`${location}.routes must list distinct providers.`);
     }
     function validateConfig2(config, repository) {
       if (!config || typeof config !== "object" || Array.isArray(config)) {
         throw new Error("Repository config must be a JSON object.");
       }
-      if (config.schema_version !== 1) throw new Error("Unsupported repository config schema_version.");
+      if (config.schema_version !== 2) throw new Error("Unsupported repository config schema_version; schema 2 lists each lane's routes.");
       if (config.repository !== repository) {
         throw new Error(`Config repository mismatch: expected ${repository}, found ${config.repository || "<empty>"}.`);
       }
@@ -194,23 +203,15 @@ var require_index = __commonJS({
         if (!ALLOWED_LANES.has(lane.id)) throw new Error(`${location}.id must be A, B, or C.`);
         if (laneIds.has(lane.id)) throw new Error(`Lane ${lane.id} is configured more than once.`);
         laneIds.add(lane.id);
-        if (typeof lane.provider !== "string" || !lane.provider.trim()) throw new Error(`${location}.provider must be non-empty.`);
-        if (lane.credential_providers !== void 0 && (!Array.isArray(lane.credential_providers) || lane.credential_providers.length !== 2 || new Set(lane.credential_providers).size !== 2 || lane.credential_providers.some((provider) => !BUNDLE_PROVIDERS.has(provider)) || !lane.credential_providers.includes(lane.provider) || lane.key_weights !== void 0)) {
-          throw new Error(`${location}.credential_providers must name two of openai, command-code, opencode-go and anthropic, include the lane provider, and cannot use key_weights.`);
+      }
+      validateKeySlots(config);
+      for (const [index, lane] of config.lanes.entries()) {
+        const location = `lanes[${index}]`;
+        for (const field of Object.keys(lane)) {
+          if (Object.hasOwn(RETIRED_LANE_FIELDS, field)) throw new Error(`${location}.${field} was replaced by ${RETIRED_LANE_FIELDS[field]} in schema 2.`);
+          if (!LANE_FIELDS.has(field)) throw new Error(`${location}.${field} is not a lane field.`);
         }
         if (lane.advisory !== void 0 && typeof lane.advisory !== "boolean") throw new Error(`${location}.advisory must be a boolean.`);
-        if (lane.resend_unserved !== void 0 && typeof lane.resend_unserved !== "boolean") {
-          throw new Error(`${location}.resend_unserved must be a boolean.`);
-        }
-        if (lane.key_weights !== void 0 && (!Array.isArray(lane.key_weights) || lane.key_weights.length < 2 || lane.key_weights.length > 4 || lane.key_weights.some((weight) => !Number.isInteger(weight) || weight < 1 || weight > 100))) {
-          throw new Error(`${location}.key_weights must be an array of 2 to 4 integers from 1 to 100.`);
-        }
-        if (lane.key_order !== void 0 && lane.key_order !== "sequential") {
-          throw new Error(`${location}.key_order must be "sequential" when configured.`);
-        }
-        if (lane.key_order !== void 0 && lane.key_weights !== void 0) {
-          throw new Error(`${location}.key_order cannot be combined with key_weights.`);
-        }
         if (!ALLOWED_PROTOCOLS.has(lane.protocol)) throw new Error(`${location}.protocol is not supported.`);
         for (const field of ["request_timeout_ms", "model_budget_ms"]) {
           if (lane[field] !== void 0 && (!Number.isInteger(lane[field]) || lane[field] < 1)) {
@@ -220,27 +221,14 @@ var require_index = __commonJS({
         if (lane.request_timeout_ms !== void 0 && lane.model_budget_ms !== void 0 && lane.model_budget_ms < lane.request_timeout_ms) {
           throw new Error(`${location}.model_budget_ms must be greater than or equal to request_timeout_ms.`);
         }
-        validateModel(lane.primary, `${location}.primary`);
-        if (!Array.isArray(lane.fallbacks)) throw new Error(`${location}.fallbacks must be an array.`);
-        if (lane.fallbacks.length > 1) throw new Error(`${location} supports at most one fallback.`);
-        lane.fallbacks.forEach((model, modelIndex) => validateModel(model, `${location}.fallbacks[${modelIndex}]`));
-        const modelEntries = [
-          [lane.primary, `${location}.primary`],
-          ...lane.fallbacks.map((model, modelIndex) => [model, `${location}.fallbacks[${modelIndex}]`])
-        ];
+        validateModel(lane.model, `${location}.model`);
+        validateModelOptions(config, lane, lane.model, `${location}.model`);
         if (lane.first_pass !== void 0) {
           validateModel(lane.first_pass, `${location}.first_pass`);
-          if (lane.first_pass.cross_provider !== void 0) {
-            throw new Error(`${location}.first_pass cannot configure cross_provider; the lane's own chain serves when it cannot.`);
-          }
-          modelEntries.unshift([lane.first_pass, `${location}.first_pass`]);
+          validateModelOptions(config, lane, lane.first_pass, `${location}.first_pass`);
+          if (lane.first_pass.id === lane.model.id) throw new Error(`Lane ${lane.id} contains a duplicate first-pass/model id.`);
         }
-        for (const [model, modelLocation] of modelEntries) validateModelOptions(config, lane, model, modelLocation);
-        const ids = modelEntries.map(([model]) => model.id);
-        if (new Set(ids).size !== ids.length) {
-          throw new Error(`Lane ${lane.id} contains a duplicate first-pass/primary/fallback model id.`);
-        }
-        if (lane.last_resort !== void 0) validateLastResort(config, lane, location);
+        validateRoutes(config, lane, location);
       }
       if (config.lanes.every((lane) => lane.advisory === true)) {
         throw new Error("At least one lane must be required; every configured lane is advisory.");
@@ -280,7 +268,7 @@ var require_index = __commonJS({
         process.exitCode = 1;
       }
     }
-    module2.exports = { configFileName, loadConfig, validateConfig: validateConfig2, run };
+    module2.exports = { configFileName, loadConfig, validateConfig: validateConfig2, keySlotFor: keySlotFor2, run };
   }
 });
 
@@ -288,7 +276,7 @@ var require_index = __commonJS({
 var require_review_credentials = __commonJS({
   "review-action/src/review-credentials.js"(exports2, module2) {
     "use strict";
-    function readCredentials2(lanes, env, maskSecret = () => {
+    function readCredentials2(keySlots, env, maskSecret = () => {
     }) {
       const slots = /* @__PURE__ */ new Map();
       const keysOf = (value) => String(value || "").split(/\r?\n/).map((key) => key.trim()).filter(Boolean);
@@ -304,22 +292,22 @@ var require_review_credentials = __commonJS({
         }
         return value.providers;
       };
-      for (const lane of lanes) {
-        const key = env[`LANE_${lane.id}_KEY`] || "";
-        const base = env[`LANE_${lane.id}_API_BASE`] || "";
+      for (const [id, providers] of Object.entries(keySlots || {})) {
+        const key = env[`LANE_${id}_KEY`] || "";
+        const base = env[`LANE_${id}_API_BASE`] || "";
         const profiles = /* @__PURE__ */ new Map();
         try {
-          if (lane.credential_providers) {
+          if (providers.length > 1) {
             if (!key && !base) {
-              for (const provider of lane.credential_providers) profiles.set(provider, credential("", ""));
+              for (const provider of providers) profiles.set(provider, credential("", ""));
             } else {
               try {
-                const keys = envelope(key, lane.credential_providers);
-                for (const provider of lane.credential_providers) {
+                const keys = envelope(key, providers);
+                for (const provider of providers) {
                   for (const value of keysOf(keys[provider])) maskSecret(value);
                 }
-                const bases = envelope(base, lane.credential_providers);
-                for (const provider of lane.credential_providers) {
+                const bases = envelope(base, providers);
+                for (const provider of providers) {
                   const keysForProvider = keysOf(keys[provider]);
                   profiles.set(provider, { apiKey: keysForProvider[0], keys: keysForProvider, baseUrl: bases[provider].trim().replace(/\/$/, "") });
                 }
@@ -328,24 +316,24 @@ var require_review_credentials = __commonJS({
                   if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash) throw new Error("Invalid endpoint");
                 }
               } catch {
-                throw new Error(`Lane ${lane.id} requires matching version-1 provider credential bundles; no requests were sent.`);
+                throw new Error(`Lane ${id} requires matching version-1 provider credential bundles; no requests were sent.`);
               }
             }
           } else {
             if (key.trim().startsWith("{") || base.trim().startsWith("{")) {
-              throw new Error(`Lane ${lane.id} does not configure provider credential bundles; no requests were sent.`);
+              throw new Error(`Lane ${id} does not configure provider credential bundles; no requests were sent.`);
             }
-            profiles.set(lane.provider, credential(key, base));
+            profiles.set(providers[0], credential(key, base));
           }
         } catch {
           profiles.clear();
-          for (const provider of lane.credential_providers || [lane.provider]) {
+          for (const provider of providers) {
             profiles.set(provider, { apiKey: void 0, keys: [], baseUrl: "", invalid: true });
           }
         }
-        slots.set(lane.id, profiles);
+        slots.set(id, profiles);
       }
-      return (laneId, provider) => slots.get(laneId)?.get(provider);
+      return (slotId, provider) => slots.get(slotId)?.get(provider);
     }
     module2.exports = { readCredentials: readCredentials2 };
   }
@@ -917,13 +905,11 @@ var require_review_status = __commonJS({
     var MARKER = "<!-- ai-pr-review-status:v1 -->";
     var labels = {
       running: "\u4E3B\u6A21\u578B\u8FD0\u884C\u4E2D",
-      fallback: "\u5907\u7528\u6A21\u578B\u8FD0\u884C\u4E2D",
       complete: "\u5DF2\u751F\u6210\uFF0C\u8BC1\u636E\u683C\u5F0F\u5DF2\u6821\u9A8C",
       reused: "\u590D\u7528\u5F53\u524D\u63D0\u4EA4\u7684\u6709\u6548\u8BC1\u636E",
       failed: "\u5BA1\u6838\u672A\u751F\u6210",
       partial: "\u8F93\u51FA\u4E0D\u5B8C\u6574\uFF0C\u4E0D\u8BA1\u5165 quorum",
       publication_failed: "\u7ED3\u679C\u53D1\u5E03\u5931\u8D25\uFF0C\u4E0D\u8BA1\u5165 quorum",
-      resending: "\u6A21\u578B\u672A\u53D7\u7406\uFF0C\u6362\u4F1A\u8BDD\u91CD\u53D1\u4E00\u6B21\u4E2D",
       cross: "\u672C\u4F9B\u5E94\u5546\u672A\u4EA7\u751F\u53EF\u7528\u5BA1\u6838\uFF0C\u540C\u6A21\u578B\u7ECF\u53E6\u4E00\u4F9B\u5E94\u5546\u8FD0\u884C\u4E2D",
       cross_model: "\u672C\u4F9B\u5E94\u5546\u672A\u4EA7\u751F\u53EF\u7528\u5BA1\u6838\uFF0C\u53E6\u4E00\u4F9B\u5E94\u5546\u7684\u515C\u5E95\u6A21\u578B\u8FD0\u884C\u4E2D",
       account: "key \u672A\u80FD\u670D\u52A1\uFF0C\u540C\u6A21\u578B\u6362\u540C\u4E00 Secret \u69FD\u4F4D\u7684\u4E0B\u4E00\u628A key \u8FD0\u884C\u4E2D",
@@ -954,7 +940,7 @@ var require_review_status = __commonJS({
       const rows = new Map(lanes.map((lane) => {
         const first = reusableLaneIds.has(lane.id) ? { state: "reused" } : initial.get(lane.id) ?? {};
         if (first.state && !Object.hasOwn(labels, first.state)) throw new Error("Unknown lane/status transition.");
-        return [lane.id, { primary: lane.primary.id, state: first.state ?? "running", served: first.served ?? null, detail: first.detail ?? null }];
+        return [lane.id, { primary: lane.model.id, state: first.state ?? "running", served: first.served ?? null, detail: first.detail ?? null }];
       }));
       const summaries = comments.filter((item) => item.user?.login === "github-actions[bot]" && item.body?.split(/\r?\n/, 1)[0] === MARKER);
       let comment = summaries.at(-1);
@@ -1193,7 +1179,7 @@ var require_review_incremental = __commonJS({
       return { items, omitted: candidates.length - items.length };
     }
     function trustedState2(lane, state, promptVersion) {
-      const models = [lane.first_pass, lane.primary, ...lane.fallbacks || [], lane.last_resort?.first_pass, lane.last_resort?.primary].filter(Boolean).map((model) => model.id);
+      const models = [lane.first_pass, lane.model, ...(lane.routes || []).flatMap((route) => [route.first_pass, route.model])].filter(Boolean).map((model) => model.id);
       return Boolean(state) && state.prompt === promptVersion && models.includes(state.model);
     }
     function planLane2({ lane, state, evidence, base, fingerprint, promptVersion, manual, firstPassDue }) {
@@ -1300,7 +1286,7 @@ var require_review_incremental = __commonJS({
 });
 
 // review-action/src/review-runner.js
-var { validateConfig } = require_index();
+var { validateConfig, keySlotFor } = require_index();
 var { readCredentials } = require_review_credentials();
 var { packDiff, packIncremental, collectIssues, enrichWorkflows } = require_review_context();
 var { PROMPT_VERSION, buildSystemPrompt, parseReview, renderReview, renderPartialReview } = require_review_report();
@@ -1375,8 +1361,9 @@ async function runReview({
   }
   const lanes = reviewConfig.lanes;
   const reviewPolicy = reviewConfig.review_policy;
-  const credentialsFor = readCredentials(lanes, process2.env, maskSecret);
-  const laneCredentials = Object.fromEntries(lanes.map((lane) => [lane.id, credentialsFor(lane.id, lane.provider)]));
+  const credentialsFor = readCredentials(reviewConfig.key_slots, process2.env, maskSecret);
+  const slotOf = (lane, provider) => keySlotFor(reviewConfig, lane.id, provider);
+  const ownProvider = (lane) => lane.routes[0].provider;
   const { data: pull } = await github.rest.pulls.get({
     owner,
     repo,
@@ -1420,7 +1407,7 @@ async function runReview({
   const firstPassBegin = (laneId, head, modelId) => `<!-- ai-pr-review-first-pass:v1 lane=${laneId} head=${head} model=${modelId} -->`;
   const withoutFirstPassMarkers = (text) => String(text).replace(/<!-- \/?ai-pr-review-first-pass:v1[^>]*-->/g, "");
   function priorFirstPass(lane) {
-    if (!lane.first_pass && !lane.last_resort?.first_pass) return null;
+    if (!lane.first_pass && !lane.routes.some((route) => route.first_pass)) return null;
     const marker = `<!-- ai-pr-review-bot:lane-${lane.id} -->`;
     const comment = existingComments.filter((item) => item.user?.login === "github-actions[bot]" && item.body?.startsWith(marker + "\n")).at(-1);
     const match = comment && firstPassPattern.exec(comment.body || "");
@@ -1754,10 +1741,10 @@ ${issueContext}` : "Referenced issues: none.",
       const replies = collectReplies({ pull, since: state.at, comments: existingComments, reviews, reviewComments });
       const previousJson = JSON.stringify(previousForPrompt(state.findings));
       const repliesJson = JSON.stringify(replies.items);
-      const fullPack = fullContextFor(lane.primary).pack;
+      const fullPack = fullContextFor(lane.model).pack;
       const sincePatchChars = since.changes ? since.sinceChars : 0;
       if (since.changes?.length && sincePatchChars <= INCREMENTAL_SHARE_LIMIT * fullPatchChars) await (since.texts ??= fetchTexts(since));
-      const sincePack = since.changes ? packIncremental(since.changes, Math.min(...[lane.primary, ...lane.fallbacks].map(budgetOf))) : null;
+      const sincePack = since.changes ? packIncremental(since.changes, budgetOf(lane.model)) : null;
       const missingText = since.changes ? since.changes.filter((change) => change.status !== "removed" && typeof change.patch === "string" && change.patch && typeof change.full_text !== "string").length : 0;
       const decision = !since.changes ? { incremental: false, reason: since.reason } : chooseIncremental({
         changedFiles: since.changes.length,
@@ -1850,7 +1837,7 @@ ${googleDeepReviewContract}`), model.review_lane_id, laneMode(model));
     return payload;
   }
   const protocolOf = (lane, model) => model.protocol ?? lane.protocol;
-  const legacyGoogle = (lane, model) => protocolOf(lane, model) === "google-generate-content" && lane.provider !== "opencode-go";
+  const legacyGoogle = (lane, model) => protocolOf(lane, model) === "google-generate-content" && ownProvider(lane) !== "opencode-go";
   function goGoogleBase(baseUrl) {
     const url = new URL(baseUrl);
     if (url.hostname === "opencode.ai" && /^\/zen\/go\/v1\/?$/.test(url.pathname)) url.pathname = "/inference/go/v1";
@@ -1884,39 +1871,16 @@ ${requestError || ""}`;
     const modelBudgetMs = Number(lane.model_budget_ms) || defaultModelBudgetMs;
     return Math.min(requestTimeoutMs, modelBudgetMs);
   }
-  const spentKeys = { A: /* @__PURE__ */ new Set(), B: /* @__PURE__ */ new Set(), C: /* @__PURE__ */ new Set() };
-  const creditSpentKeys = { A: /* @__PURE__ */ new Set(), B: /* @__PURE__ */ new Set(), C: /* @__PURE__ */ new Set() };
-  const weightsOf = (laneId, provider = lanes.find((lane) => lane.id === laneId)?.provider) => {
-    const lane = lanes.find((candidate) => candidate.id === laneId);
-    const configured = (lane?.last_resort?.provider === provider ? lane.last_resort.key_weights : lane?.key_weights) ?? [];
-    return credentialsFor(laneId, provider).keys.map((_, index) => configured[index] ?? 1);
-  };
-  const inOrder = (laneId, provider) => {
-    const lane = lanes.find((candidate) => candidate.id === laneId);
-    return lane?.key_order === "sequential" && (provider ?? lane.provider) === lane.provider;
-  };
-  function pickedKey(laneId, provider) {
-    if (inOrder(laneId, provider)) return 0;
-    const weights = weightsOf(laneId, provider);
-    let rest = (Math.abs(Number(pullNumber)) || 0) % weights.reduce((sum, weight) => sum + weight, 0);
-    return Math.max(0, weights.findIndex((weight) => (rest -= weight) < 0));
-  }
-  function firstUnspent(picked, count, spent) {
-    for (let step = 0; step < count; step++) {
-      if (!spent.has((picked + step) % count)) return (picked + step) % count;
-    }
-    return picked;
-  }
-  const startKey = (laneId) => firstUnspent(pickedKey(laneId), laneCredentials[laneId].keys.length, spentKeys[laneId]);
+  const firstUnspent = (count, spent) => Array.from({ length: count }, (_, index) => index).find((index) => !spent.has(index)) ?? 0;
   const accountFailure = (outcome) => outcome.failureKind === "quota-exhausted" || outcome.failureKind === "authentication-failed" || outcome.httpStatus === 429;
   const accountReason = (outcome, provider) => outcome.failureKind === "quota-exhausted" ? quotaWording(provider, outcome.quota ?? {}).banner : outcome.failureKind === "authentication-failed" ? "key \u88AB\u62D2\u7EDD" : "\u8D26\u53F7\u9650\u6D41";
-  const ownRoute = (lane, model, keyIndex = startKey(lane.id)) => ({ provider: lane.provider, credentialLane: lane.id, modelId: model.id, keyIndex });
-  async function callModel(lane, model, {
-    windowMs = modelWindowMs(lane, model),
-    sessionSuffix = "",
-    attempt = 1,
-    route = ownRoute(lane, model)
-  } = {}) {
+  function routeTo(lane, model, route, keyIndex = 0) {
+    const credentialLane = slotOf(lane, route.provider);
+    const credentials = credentialLane && credentialsFor(credentialLane, route.provider);
+    if (!credentials?.apiKey || !credentials?.baseUrl) return null;
+    return { provider: route.provider, credentialLane, modelId: route.id ?? model.id, label: route.label, keyIndex };
+  }
+  async function callModel(lane, model, { windowMs = modelWindowMs(lane, model), sessionSuffix = "", attempt = 1, route } = {}) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), windowMs);
     const startedAt = Date.now();
@@ -2035,28 +1999,14 @@ ${requestError || ""}`;
       quota: usable ? null : quota
     };
   }
-  const UNSERVED_RESEND_DELAY_MS = 3e4;
-  const UNSERVED_RESEND_MIN_WINDOW_MS = 6e4;
-  function unservedResend(lane, model, outcome) {
-    if (lane.resend_unserved !== true || !outcome.unserved || outcome.localDeadline) return null;
-    if (["quota-exhausted", "authentication-failed", "gateway-blocked", "endpoint-unavailable"].includes(outcome.failureKind)) return null;
-    const status = outcome.httpStatus;
-    if (!(status === 429 || status === 200 || Number.isInteger(status) && status >= 500)) return null;
-    const delayMs = status === 200 ? 0 : Math.min(outcome.retryAfterMs ?? UNSERVED_RESEND_DELAY_MS, 12e4);
-    const windowMs = modelWindowMs(lane, model) - outcome.elapsedMs - delayMs;
-    return windowMs >= UNSERVED_RESEND_MIN_WINDOW_MS ? { delayMs, windowMs } : null;
-  }
-  function crossRoute(lane, model, cross) {
-    const target = lanes.find((candidate) => candidate.id === cross.credential_lane);
-    const provider = cross.credential_provider ?? target?.provider;
-    const credentials = credentialsFor(cross.credential_lane, provider);
-    if (!target || !credentials?.apiKey || !credentials?.baseUrl) {
-      console.log(`[Lane ${lane.id}/${model.id}] a cross-provider fallback is configured, but the Lane ${cross.credential_lane} secret slot is not provisioned.`);
+  function laterRoute(lane, model, route) {
+    const via = routeTo(lane, model, route);
+    if (!via) {
+      console.log(`[Lane ${lane.id}/${model.id}] the ${route.provider} route is configured, but the Lane ${slotOf(lane, route.provider)} secret slot is not provisioned.`);
       return null;
     }
-    const sameModel = cross.id === model.id || cross.id.endsWith(`/${model.id}`);
-    const label = cross.label ?? (sameModel ? void 0 : cross.id);
-    return { provider, credentialLane: target.id, modelId: cross.id, label, keyIndex: pickedKey(target.id, provider) };
+    const sameModel = via.modelId === model.id || via.modelId.endsWith(`/${model.id}`);
+    return { ...via, label: route.label ?? (sameModel ? void 0 : via.modelId) };
   }
   function validateAndRender(lane, text, model, complete, finishReason) {
     const supplied = contextFor(model, lane.id).pack;
@@ -2141,20 +2091,21 @@ ${requestError || ""}`;
     };
   }
   async function requestReview(lane) {
-    const primary = lane.primary;
+    const model = lane.model;
     const firstPass = lane.first_pass && !priorFirstPass(lane) ? lane.first_pass : null;
     if (firstPass) {
-      console.log(`[Lane ${lane.id}] this PR has no first-pass review yet; ${firstPass.id} leads, and later commits go to ${primary.id}.`);
+      console.log(`[Lane ${lane.id}] this PR has no first-pass review yet; ${firstPass.id} leads, and later commits go to ${model.id}.`);
     }
-    const chain = [...firstPass ? [firstPass] : [], primary, ...lane.fallbacks];
-    const credentials = laneCredentials[lane.id];
-    if (!chain.some((model) => hasMaterial(contextFor(model, lane.id).pack))) {
+    const chain = [...firstPass ? [firstPass] : [], model];
+    const [first, ...rest] = lane.routes;
+    const later = rest.filter((route) => !route.when);
+    const paid = rest.find((route) => route.when === "plans_spent");
+    const credentials = credentialsFor(lane.id, reviewConfig.key_slots[lane.id][0]);
+    if (!chain.some((current) => hasMaterial(contextFor(current, lane.id).pack))) {
       return {
         lane,
-        primary,
         servedBy: null,
         reasoningLength: 0,
-        degraded: false,
         status: "diagnostic",
         review: "> AI review was not generated.\n\nNo complete inspectable text patch was supplied. No model request was sent; binary, unavailable or omitted patches cannot establish review evidence."
       };
@@ -2163,10 +2114,8 @@ ${requestError || ""}`;
       console.log(`[Lane ${lane.id}] fixed credential slots are ${credentials?.invalid ? "invalid" : "not available"}; skipping model requests for this lane.`);
       return {
         lane,
-        primary,
         servedBy: null,
         reasoningLength: 0,
-        degraded: false,
         status: "diagnostic",
         review: [
           "> AI review was not generated.",
@@ -2177,9 +2126,11 @@ ${requestError || ""}`;
         ].join("\n")
       };
     }
-    const keyCount = credentials.keys.length;
+    const own = routeTo(lane, model, first);
+    if (!own) console.log(`[Lane ${lane.id}] the ${first.provider} route is configured, but the Lane ${slotOf(lane, first.provider)} secret slot is not provisioned.`);
+    const keyCount = own ? credentialsFor(own.credentialLane, first.provider).keys.length : 0;
     if (keyCount > 1) {
-      console.log(`[Lane ${lane.id}] the secret slot holds ${keyCount} keys, ${inOrder(lane.id) ? "used in order" : `weights ${weightsOf(lane.id).join(":")}`}; PR #${pullNumber} starts on key ${pickedKey(lane.id) + 1}.`);
+      console.log(`[Lane ${lane.id}] the secret slot holds ${keyCount} keys, used in order; PR #${pullNumber} starts on the first one that has not failed.`);
     }
     const tried = [];
     let lastResponse;
@@ -2188,45 +2139,39 @@ ${requestError || ""}`;
     let lastFailureKind = "";
     let lastReportError = "";
     let lastOutcome = "";
-    let lastProvider = lane.provider;
+    let lastProvider = first.provider;
     let lastClosedStream = null;
     let bestPartial = null;
     const quotaNotes = [];
     let onlyQuota = true;
     const quotaProviders = /* @__PURE__ */ new Set();
     let finalStage = null;
-    async function attemptModel(model, stage) {
-      const supplied = contextFor(model, lane.id).pack;
+    async function attemptModel(model2, stage) {
+      const supplied = contextFor(model2, lane.id).pack;
       if (!supplied.coverage.some((file) => file.patch_available && file.supplied_hunks)) {
         lastOutcome = "no inspectable material for the configured context profile";
-        tried.push(`${model.id} -> ${lastOutcome} (0 attempt(s))`);
+        tried.push(`${model2.id} -> ${lastOutcome} (0 attempt(s))`);
         return null;
       }
       let ownQuota = null;
-      const steps = [{ key: stage.startKey() }];
+      const crosses = stage.crosses && model2 === lane.model;
+      const steps = stage.available ? [{ key: stage.startKey() }] : crosses ? later.map((route) => ({ cross: route })) : [];
       const keysTried = /* @__PURE__ */ new Set();
-      for (const { cross: cross2, key, from } of steps) {
-        const via = cross2 ? crossRoute(lane, model, cross2) : null;
-        if (cross2 && !via) continue;
+      for (const { cross, key, from } of steps) {
+        const via = cross ? laterRoute(lane, model2, cross) : null;
+        if (cross && !via) continue;
         if (via) {
-          console.log(`[Lane ${lane.id}/${model.id}] no usable review from ${lane.provider}; sending the same request once to ${via.modelId} on ${via.provider} through the Lane ${via.credentialLane} secret slot.`);
+          console.log(`[Lane ${lane.id}/${model2.id}] no usable review from ${first.provider}; sending the same request once to ${via.modelId} on ${via.provider} through the Lane ${via.credentialLane} secret slot.`);
           await statusPublisher.update(lane.id, via.label ? "cross_model" : "cross", `${via.modelId} @ ${via.provider}`, ownQuota?.status);
         }
-        if (from) await statusPublisher.update(lane.id, "account", `${model.id} @ key ${key + 1}`);
-        const route = via ?? stage.route(model, key);
+        if (from) await statusPublisher.update(lane.id, "account", `${model2.id} @ key ${key + 1}`);
+        const route = via ?? stage.route(model2, key);
         const servedKey = !via && stage.keyCount > 1 ? { index: key, count: stage.keyCount, from } : null;
         const servedVia = via ?? (stage.lastResort ? { ...route, lastResort: true } : null);
         if (!via) keysTried.add(key);
         finalStage = stage;
-        let outcome = await callModel(lane, model, { route });
-        const resend = unservedResend(lane, model, outcome);
-        if (resend) {
-          console.log(`[Lane ${lane.id}/${route.modelId}] no model output was produced (HTTP ${outcome.httpStatus}); resending once with a fresh session after ${resend.delayMs} ms.`);
-          await statusPublisher.update(lane.id, "resending", route.modelId);
-          await new Promise((resolve) => setTimeout(resolve, resend.delayMs));
-          outcome = await callModel(lane, model, { route, windowMs: resend.windowMs, sessionSuffix: "-resend", attempt: 2 });
-        }
-        const attemptLabel = via ? `${model.id} via ${via.provider} ${via.modelId}` : stage.lastResort ? `${model.id} on ${route.provider} (last resort${servedKey ? `, key ${key + 1}/${stage.keyCount}` : ""})` : servedKey ? `${model.id} (key ${key + 1}/${stage.keyCount})` : model.id;
+        const outcome = await callModel(lane, model2, { route });
+        const attemptLabel = via ? `${model2.id} via ${via.provider} ${via.modelId}` : stage.lastResort ? `${model2.id} on ${route.provider} (last resort${servedKey ? `, key ${key + 1}/${stage.keyCount}` : ""})` : servedKey ? `${model2.id} (key ${key + 1}/${stage.keyCount})` : model2.id;
         const { response, responseText, requestError, attempts, failureKind } = outcome;
         lastClosedStream = outcome.errorCode === "REVIEW_INCOMPLETE_STREAM" ? { httpStatus: outcome.httpStatus ?? 200, seconds: Math.round(outcome.elapsedMs / 1e3) } : null;
         lastProvider = route.provider;
@@ -2237,28 +2182,26 @@ ${requestError || ""}`;
         lastOutcome = "";
         const quotaNote = outcome.quota ? quotaWording(route.provider, outcome.quota) : null;
         if (quotaNote) quotaProviders.add(route.provider);
-        if (!cross2) ownQuota = quotaNote;
+        if (!cross) ownQuota = quotaNote;
         const quotaKey = outcome.quota && `${route.provider}:${outcome.quota.credit ? "credit" : outcome.quota.window ?? "plan"}`;
         if (quotaNote && !quotaNotes.some((note) => note.key === quotaKey)) quotaNotes.push({ key: quotaKey, provider: route.provider, ...quotaNote });
         if (response?.ok && !requestError && failureKind !== "gateway-blocked") {
           try {
-            const { review: review2, record, reasoningLength, reasoningUnit, complete, finishReason } = extractReview(lane, model, responseText);
+            const { review: review2, record, reasoningLength, reasoningUnit, complete, finishReason } = extractReview(lane, model2, responseText);
             if (review2 && complete) {
               return {
                 lane,
-                primary,
-                servedBy: model,
+                servedBy: model2,
                 servedVia,
                 servedKey,
-                // Why the lane's own provider could not serve, when it was a spent plan.
+                // Why the lane's first route could not serve, when it was a spent plan.
                 ownQuota: via ? ownQuota : null,
-                // Why the last resort served: the spent plans of both providers.
+                // Why the paid route served: the spent plans before it.
                 lastResortReason: stage.lastResort ? stage.reason : null,
                 review: review2,
                 reasoningLength,
                 reasoningUnit,
-                degraded: stage.degraded(model),
-                firstPass: model === stage.firstPass,
+                firstPass: model2 === stage.firstPass,
                 record,
                 status: "valid"
               };
@@ -2267,15 +2210,13 @@ ${requestError || ""}`;
             if (review2) {
               bestPartial ??= {
                 lane,
-                primary,
-                servedBy: model,
+                servedBy: model2,
                 servedVia,
                 servedKey,
                 lastResortReason: stage.lastResort ? stage.reason : null,
                 review: review2,
                 reasoningLength,
                 reasoningUnit,
-                degraded: stage.degraded(model),
                 status: "partial"
               };
               console.log(`[Lane ${lane.id}/${route.modelId}] response was incomplete; trying the next route or model in the lane.`);
@@ -2291,70 +2232,65 @@ ${requestError || ""}`;
         if (!quotaNote) onlyQuota = false;
         const failed = lastClosedStream ? `HTTP ${lastClosedStream.httpStatus}, stream closed before the model finished after ${lastClosedStream.seconds} s` : `HTTP ${response?.status ?? "request failed"}${quotaNote ? `, ${quotaNote.tried}` : ""}`;
         tried.push(`${attemptLabel} -> ${lastFailureKind === "report-invalid" ? `evidence contract rejected: ${lastReportError}` : lastOutcome || failed} (${attempts ?? 0} attempt(s))`);
-        if (cross2) continue;
+        if (cross) continue;
         if (stage.keyCount > 1 && accountFailure(outcome)) {
           if (outcome.failureKind === "quota-exhausted" || outcome.failureKind === "authentication-failed") stage.spent.add(key);
           if (outcome.failureKind === "quota-exhausted") stage.creditSpent.add(key);
           const next = Array.from({ length: stage.keyCount - 1 }, (_, step) => (key + step + 1) % stage.keyCount).find((index) => !keysTried.has(index) && !stage.spent.has(index));
           if (next !== void 0) {
             const reason = accountReason(outcome, route.provider);
-            console.log(`[Lane ${lane.id}/${model.id}] key ${key + 1} of ${stage.keyCount} could not serve (${outcome.failureKind || "rate limited"}, HTTP ${outcome.httpStatus ?? "none"}); sending the same request once with key ${next + 1} of the Lane ${lane.id} slot.`);
+            console.log(`[Lane ${lane.id}/${model2.id}] key ${key + 1} of ${stage.keyCount} could not serve (${outcome.failureKind || "rate limited"}, HTTP ${outcome.httpStatus ?? "none"}); sending the same request once with key ${next + 1} of the Lane ${route.credentialLane} slot.`);
             steps.push({ key: next, from: { index: key, reason } });
             continue;
           }
         }
-        if (stage.crosses && model.cross_provider) {
-          steps.push(...[].concat(model.cross_provider).map((route2) => ({ cross: route2 })));
-        }
+        if (crosses) steps.push(...later.map((later2) => ({ cross: later2 })));
       }
       return null;
     }
+    const ownSpent = /* @__PURE__ */ new Set();
     const ownStage = {
       keyCount,
       crosses: true,
       lastResort: false,
       firstPass,
-      startKey: () => startKey(lane.id),
-      route: (model, key) => ownRoute(lane, model, key),
-      spent: spentKeys[lane.id],
-      creditSpent: creditSpentKeys[lane.id],
-      // The primary after a first pass that could not serve is the lane's normal path.
-      degraded: (model) => model !== primary && model !== firstPass
+      available: Boolean(own),
+      startKey: () => firstUnspent(keyCount, ownSpent),
+      route: (current, key) => ({ provider: own.provider, credentialLane: own.credentialLane, modelId: current.id, keyIndex: key }),
+      spent: ownSpent,
+      // The spent keys whose credit or plan ran out, as opposed to a refused key.
+      creditSpent: /* @__PURE__ */ new Set()
     };
-    for (const model of chain) {
-      if (model !== chain[0]) await statusPublisher.update(lane.id, model === primary ? "running" : "fallback", model.id);
-      const served = await attemptModel(model, ownStage);
+    for (const current of chain) {
+      if (current !== chain[0]) await statusPublisher.update(lane.id, "running", current.id);
+      const served = await attemptModel(current, ownStage);
       if (served) return served;
-      if (model !== chain[chain.length - 1]) {
-        console.log(`[Lane ${lane.id}/${primary.id}] falling back to the next model in the lane.`);
-      }
     }
-    const last = lane.last_resort;
-    const cross = last && primary.cross_provider;
-    const crossProvider = cross && (cross.credential_provider ?? lanes.find((candidate) => candidate.id === cross.credential_lane)?.provider);
-    if (last && !bestPartial && onlyQuota && quotaProviders.has(lane.provider) && quotaProviders.has(crossProvider)) {
-      const lastCredentials = credentialsFor(lane.id, last.provider);
-      if (!lastCredentials?.apiKey || !lastCredentials?.baseUrl) {
-        console.log(`[Lane ${lane.id}] ${lane.provider} and ${crossProvider} both report a spent quota, but the Lane ${lane.id} slot holds no ${last.provider} credentials for the last resort.`);
+    const plans2 = [first, ...later].map((route) => route.provider);
+    if (paid && !bestPartial && onlyQuota && plans2.every((provider) => quotaProviders.has(provider))) {
+      const resort = routeTo(lane, model, paid);
+      if (!resort) {
+        console.log(`[Lane ${lane.id}] ${plans2.join(" and ")} all report a spent quota, but the Lane ${slotOf(lane, paid.provider)} slot holds no ${paid.provider} credentials for the last resort.`);
       } else {
-        const lastFirst = last.first_pass && !priorFirstPass(lane) && !incrementalContexts.has(lane.id) ? last.first_pass : null;
+        const resortKeys = credentialsFor(resort.credentialLane, paid.provider).keys.length;
+        const lastFirst = paid.first_pass && !priorFirstPass(lane) && !incrementalContexts.has(lane.id) ? paid.first_pass : null;
         const spent = /* @__PURE__ */ new Set();
         const resortStage = {
-          keyCount: lastCredentials.keys.length,
+          keyCount: resortKeys,
           crosses: false,
           lastResort: true,
           firstPass: lastFirst,
+          available: true,
           reason: quotaNotes.map((note) => `${note.provider} ${note.banner}`).join("\uFF1B"),
-          startKey: () => firstUnspent(pickedKey(lane.id, last.provider), lastCredentials.keys.length, spent),
-          route: (model, key) => ({ provider: last.provider, credentialLane: lane.id, modelId: model.id, keyIndex: key }),
+          startKey: () => firstUnspent(resortKeys, spent),
+          route: (current, key) => ({ provider: paid.provider, credentialLane: resort.credentialLane, modelId: current.id, keyIndex: key }),
           spent,
-          creditSpent: /* @__PURE__ */ new Set(),
-          degraded: () => false
+          creditSpent: /* @__PURE__ */ new Set()
         };
-        for (const model of [lastFirst, last.primary].filter(Boolean)) {
-          console.log(`[Lane ${lane.id}] ${lane.provider} and ${crossProvider} both report a spent quota; the last resort sends the review to ${model.id} on ${last.provider} through the Lane ${lane.id} secret slot${model === lastFirst ? " as this PR's first pass" : ""}.`);
-          await statusPublisher.update(lane.id, "last_resort", `${model.id} @ ${last.provider}`);
-          const served = await attemptModel(model, resortStage);
+        for (const current of [lastFirst, paid.model ?? model].filter(Boolean)) {
+          console.log(`[Lane ${lane.id}] ${plans2.join(" and ")} all report a spent quota; the last resort sends the review to ${current.id} on ${paid.provider} through the Lane ${resort.credentialLane} secret slot${current === lastFirst ? " as this PR's first pass" : ""}.`);
+          await statusPublisher.update(lane.id, "last_resort", `${current.id} @ ${paid.provider}`);
+          const served = await attemptModel(current, resortStage);
           if (served) return served;
         }
       }
@@ -2387,11 +2323,9 @@ ${fence}
     ].join("\n");
     return {
       lane,
-      primary,
       servedBy: null,
       review,
       reasoningLength: 0,
-      degraded: false,
       status: "diagnostic",
       quotaDetail: quotaNotes.map((note) => note.status).join("\uFF1B"),
       onlyQuota: onlyQuota && quotaNotes.length > 0
@@ -2412,7 +2346,7 @@ ${fence}
   let staleReview = false;
   const validLaneIds = new Set(lanes.filter((lane) => ["reuse", "skip"].includes(plans.get(lane.id).mode)).map((lane) => lane.id));
   async function reviewAndPublish(lane) {
-    const primary = lane.primary;
+    const laneModel = lane.model;
     const result = await requestReview(lane);
     const { data: publishPull } = await github.rest.pulls.get({ owner, repo, pull_number: pullNumber });
     if (publishPull.head.sha !== reviewHeadSha || publishPull.state !== "open") {
@@ -2421,21 +2355,20 @@ ${fence}
       return;
     }
     const reviewedAt = (/* @__PURE__ */ new Date()).toISOString().replace(/\.\d{3}Z$/, "Z");
-    const { servedBy, servedVia, servedKey, review, reasoningLength, reasoningUnit, degraded, status, firstPass } = result;
+    const { servedBy, servedVia, servedKey, review, reasoningLength, reasoningUnit, status, firstPass } = result;
     const crossLabel = servedVia?.label;
     const servedModelId = crossLabel ? servedVia.modelId : servedBy?.id;
     const keyText = servedKey ? ` \xB7 key ${servedKey.index + 1}/${servedKey.count}` : "";
-    const viaText = servedVia?.lastResort ? ` via ${servedVia.provider} (last resort: plan quotas spent)${keyText}` : servedVia ? ` via ${servedVia.provider} ${servedVia.modelId} (${lane.provider} unavailable)` : keyText;
+    const viaText = servedVia?.lastResort ? ` via ${servedVia.provider} (last resort: plan quotas spent)${keyText}` : servedVia ? ` via ${servedVia.provider} ${servedVia.modelId} (${ownProvider(lane)} unavailable)` : keyText;
     const isFirstPass = firstPass === true && status === "valid";
     const prior = isFirstPass ? null : priorFirstPass(lane);
-    const modelLine = crossLabel ? `Lane ${lane.id}: ${servedModelId} via ${servedVia.provider} (${servedBy.id} on ${lane.provider} unavailable)` : degraded ? `Lane ${lane.id}: ${primary.id} unavailable -> served by ${servedBy.id}${viaText}` : `Lane ${lane.id}: ${servedBy?.id ?? primary.id}${isFirstPass ? " (first pass)" : ""}${viaText}`;
+    const modelLine = crossLabel ? `Lane ${lane.id}: ${servedModelId} via ${servedVia.provider} (${servedBy.id} on ${ownProvider(lane)} unavailable)` : `Lane ${lane.id}: ${servedBy?.id ?? laneModel.id}${isFirstPass ? " (first pass)" : ""}${viaText}`;
     const banner = [
-      ...degraded ? [`> \u2139\uFE0F Lane ${lane.id} \u7684 \`${primary.label}\` \u672A\u4EA7\u751F\u53EF\u7528\u5BA1\u6838\uFF0C\u672C\u6761 review \u7531\u540C\u901A\u9053\u5907\u7528\u6A21\u578B \`${servedBy.label}\` \u751F\u6210\u3002`] : [],
-      ...servedVia?.lastResort ? [`> \u2139\uFE0F Lane ${lane.id} \u7684\u4E24\u5BB6\u5957\u9910\u989D\u5EA6\u90FD\u5DF2\u7528\u5B8C\uFF08${result.lastResortReason}\uFF09\uFF0C\u672C\u6761 review \u7531\u6700\u540E\u515C\u5E95 \`${servedBy.label}\` \u7ECF \`${servedVia.provider}\`\uFF08Lane ${lane.id} \u7684\u56FA\u5B9A Secret \u69FD\u4F4D\uFF09\u751F\u6210\u3002`] : servedVia ? [`> \u2139\uFE0F Lane ${lane.id} \u7684 \`${servedBy.label}\` \u5728 \`${lane.provider}\` \u4E0A\u672A\u4EA7\u751F\u53EF\u7528\u5BA1\u6838${result.ownQuota ? `\uFF08${result.ownQuota.banner}\uFF09` : ""}\uFF0C\u672C\u6761 review \u7531${crossLabel ? `\u515C\u5E95\u6A21\u578B \`${crossLabel}\` ` : "\u540C\u4E00\u6A21\u578B"}\u7ECF \`${servedVia.provider}\`\uFF08Lane ${servedVia.credentialLane} \u7684\u56FA\u5B9A Secret \u69FD\u4F4D\uFF09\u751F\u6210\u3002`] : [],
+      ...servedVia?.lastResort ? [`> \u2139\uFE0F Lane ${lane.id} \u7684\u4E24\u5BB6\u5957\u9910\u989D\u5EA6\u90FD\u5DF2\u7528\u5B8C\uFF08${result.lastResortReason}\uFF09\uFF0C\u672C\u6761 review \u7531\u6700\u540E\u515C\u5E95 \`${servedBy.label}\` \u7ECF \`${servedVia.provider}\`\uFF08Lane ${lane.id} \u7684\u56FA\u5B9A Secret \u69FD\u4F4D\uFF09\u751F\u6210\u3002`] : servedVia ? [`> \u2139\uFE0F Lane ${lane.id} \u7684 \`${servedBy.label}\` \u5728 \`${ownProvider(lane)}\` \u4E0A\u672A\u4EA7\u751F\u53EF\u7528\u5BA1\u6838${result.ownQuota ? `\uFF08${result.ownQuota.banner}\uFF09` : ""}\uFF0C\u672C\u6761 review \u7531${crossLabel ? `\u515C\u5E95\u6A21\u578B \`${crossLabel}\` ` : "\u540C\u4E00\u6A21\u578B"}\u7ECF \`${servedVia.provider}\`\uFF08Lane ${servedVia.credentialLane} \u7684\u56FA\u5B9A Secret \u69FD\u4F4D\uFF09\u751F\u6210\u3002`] : [],
       ...servedKey?.from ? [`> \u2139\uFE0F Lane ${lane.id} \u7684\u7B2C ${servedKey.from.index + 1} \u628A key \u672A\u80FD\u670D\u52A1\uFF08${servedKey.from.reason}\uFF09\uFF0C\u672C\u6761 review \u7531\u540C\u4E00\u6A21\u578B\u7ECF\u540C\u4E00 Secret \u69FD\u4F4D\u7684\u7B2C ${servedKey.index + 1} \u628A key \u751F\u6210\u3002`] : []
     ];
     if (isFirstPass) {
-      banner.push(`> \u2139\uFE0F \u8FD9\u662F\u672C PR \u7684\u9996\u6B21\u5BA1\u6838\uFF0C\u7531 \`${servedBy.label}\` \u5B8C\u6210\uFF1B\u540E\u7EED\u63D0\u4EA4\u7531 \`${primary.label}\` \u5BA1\u6838\uFF0C\u672C\u6761\u9996\u5BA1\u4F1A\u6298\u53E0\u4FDD\u7559\u5728\u8BC4\u8BBA\u5E95\u90E8\u3002`);
+      banner.push(`> \u2139\uFE0F \u8FD9\u662F\u672C PR \u7684\u9996\u6B21\u5BA1\u6838\uFF0C\u7531 \`${servedBy.label}\` \u5B8C\u6210\uFF1B\u540E\u7EED\u63D0\u4EA4\u7531 \`${laneModel.label}\` \u5BA1\u6838\uFF0C\u672C\u6761\u9996\u5BA1\u4F1A\u6298\u53E0\u4FDD\u7559\u5728\u8BC4\u8BBA\u5E95\u90E8\u3002`);
     }
     const incremental = status === "valid" ? incrementalContexts.get(lane.id) : void 0;
     if (incremental) {
@@ -2461,7 +2394,7 @@ ${fence}
     } : laneRecords.get(lane.id)?.state ?? null;
     const recordLine = record ? [encodeState(record)] : [];
     const servedLabel = servedBy && servedVia ? `${servedModelId} via ${servedVia.provider}` : servedModelId;
-    const priorLabel = prior && ([lane.first_pass, lane.last_resort?.first_pass].find((model) => model?.id === prior.model)?.label ?? prior.model);
+    const priorLabel = prior && ([lane.first_pass, ...lane.routes.map((route) => route.first_pass)].find((model) => model?.id === prior.model)?.label ?? prior.model);
     const carried = (content) => prior ? [
       "",
       `<details><summary>\u9996\u5BA1 \xB7 ${priorLabel} \xB7 \u63D0\u4EA4 ${prior.head.slice(0, 7)}</summary>`,
@@ -2477,7 +2410,7 @@ ${fence}
       `<!-- ai-pr-review-bot:lane-${lane.id} -->`,
       `<!-- ai-pr-review-evidence:v2 lane=${lane.id} head=${reviewHeadSha} workflow=${workflowSha} status=${status} -->`,
       ...recordLine,
-      `## AI PR Review \xB7 Lane ${lane.id} \xB7 ${crossLabel ?? servedBy?.label ?? primary.label}${isFirstPass ? " \xB7 \u9996\u5BA1" : ""}${incremental ? " \xB7 \u589E\u91CF" : ""}`,
+      `## AI PR Review \xB7 Lane ${lane.id} \xB7 ${crossLabel ?? servedBy?.label ?? laneModel.label}${isFirstPass ? " \xB7 \u9996\u5BA1" : ""}${incremental ? " \xB7 \u589E\u91CF" : ""}`,
       "",
       `> \u5BA1\u6838\u63D0\u4EA4\uFF1A\`${reviewedHeadShortSha}\` \xB7 \u66F4\u65B0\u65F6\u95F4\uFF1A\`${reviewedAt}\` \xB7 \u6B64\u8BC4\u8BBA\u4F1A\u968F PR \u65B0\u63D0\u4EA4\u539F\u5730\u66F4\u65B0 \xB7 [Run](${runUrl})`,
       "",

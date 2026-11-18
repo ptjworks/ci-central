@@ -1,9 +1,9 @@
 'use strict';
 
 const MARKER = '<!-- ai-pr-review-status:v1 -->';
-const labels = { running: '主模型运行中', fallback: '备用模型运行中', complete: '已生成，证据格式已校验',
+const labels = { running: '主模型运行中', complete: '已生成，证据格式已校验',
   reused: '复用当前提交的有效证据', failed: '审核未生成', partial: '输出不完整，不计入 quorum',
-  publication_failed: '结果发布失败，不计入 quorum', resending: '模型未受理，换会话重发一次中',
+  publication_failed: '结果发布失败，不计入 quorum',
   cross: '本供应商未产生可用审核，同模型经另一供应商运行中',
   cross_model: '本供应商未产生可用审核，另一供应商的兜底模型运行中',
   account: 'key 未能服务，同模型换同一 Secret 槽位的下一把 key 运行中',
@@ -21,7 +21,7 @@ function createStatusPublisher({ github, owner, repo, pullNumber, head, workflow
   const rows = new Map(lanes.map((lane) => {
     const first = reusableLaneIds.has(lane.id) ? { state: 'reused' } : initial.get(lane.id) ?? {};
     if (first.state && !Object.hasOwn(labels, first.state)) throw new Error('Unknown lane/status transition.');
-    return [lane.id, { primary: lane.primary.id, state: first.state ?? 'running', served: first.served ?? null, detail: first.detail ?? null }];
+    return [lane.id, { primary: lane.model.id, state: first.state ?? 'running', served: first.served ?? null, detail: first.detail ?? null }];
   }));
   const summaries = comments.filter((item) => item.user?.login === 'github-actions[bot]' && item.body?.split(/\r?\n/, 1)[0] === MARKER);
   let comment = summaries.at(-1);

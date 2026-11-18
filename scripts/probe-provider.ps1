@@ -25,13 +25,15 @@ $key = [System.Net.NetworkCredential]::new('', $secureKey).Password
 try {
     if ([string]::IsNullOrWhiteSpace($key)) { throw 'The API key must not be empty.' }
     $base = $ApiBase.TrimEnd('/')
-    $models = @($laneConfig.primary) + @($laneConfig.fallbacks | Where-Object { $null -ne $_ })
-    Write-Host "Probing Lane $Lane provider=$($laneConfig.provider) protocol=$($laneConfig.protocol) models=$($models.id -join ',')"
+    # The lane's first route: its first pass, when it has one, and its model on that provider.
+    $provider = $laneConfig.routes[0].provider
+    $models = @($laneConfig.first_pass | Where-Object { $null -ne $_ }) + @($laneConfig.model)
+    Write-Host "Probing Lane $Lane provider=$provider protocol=$($laneConfig.protocol) models=$($models.id -join ',')"
 
     $available = $null
     foreach ($modelConfig in $models) {
         $model = $modelConfig.id
-        # A fallback may name its own protocol; it still uses this Lane's key.
+        # A model may name its own protocol; it still uses this Lane's key.
         $protocol = if ([string]::IsNullOrWhiteSpace($modelConfig.protocol)) { $laneConfig.protocol } else { $modelConfig.protocol }
         $session = "central-provider-probe-lane-$Lane"
         if ($protocol -eq 'openai-chat-completions') {
@@ -43,12 +45,12 @@ try {
                     $available = @($modelsResponse.data.id)
                 }
                 catch {
-                    if ($laneConfig.provider -ne 'volcengine-ark-coding') { throw }
+                    if ($provider -ne 'volcengine-ark-coding') { throw }
                     Write-Warning "GET /models failed for Volcengine Ark Coding; continuing with the generation probe: $($_.Exception.Message)"
                 }
             }
             if ($available.Count -gt 0 -and $model -notin $available) {
-                if ($laneConfig.provider -ne 'volcengine-ark-coding') {
+                if ($provider -ne 'volcengine-ark-coding') {
                     throw "Model $model is not present in the provider model list."
                 }
                 Write-Warning "Model $model is not present in the Volcengine Ark Coding model list; continuing with the generation probe because the Coding API may omit callable aliases."
@@ -79,9 +81,9 @@ try {
         }
         elseif ($protocol -eq 'google-generate-content') {
             # Go serves Gemini only under /inference/go/v1; the Lane base names /zen/go/v1.
-            $googleBase = if ($laneConfig.provider -eq 'opencode-go') { $base -replace '^https://opencode\.ai/zen/go/v1$', 'https://opencode.ai/inference/go/v1' } else { $base }
+            $googleBase = if ($provider -eq 'opencode-go') { $base -replace '^https://opencode\.ai/zen/go/v1$', 'https://opencode.ai/inference/go/v1' } else { $base }
             $headers = @{ 'x-goog-api-key' = $key }
-            if ($laneConfig.provider -eq 'opencode-go') { $headers['x-opencode-session'] = $session }
+            if ($provider -eq 'opencode-go') { $headers['x-opencode-session'] = $session }
             # A high-thinking Gemini probe needs enough completion room to reach final text;
             # tiny ceilings can be consumed entirely by private reasoning.
             $generationConfig = @{ maxOutputTokens = 2048 }

@@ -7,8 +7,6 @@ const ALLOWED_PROTOCOLS = new Set(['openai-chat-completions', 'openai-responses'
 const ANTHROPIC_EFFORTS = new Set(['low', 'medium', 'high', 'xhigh', 'max']);
 const ALLOWED_LANES = new Set(['A', 'B', 'C']);
 const BUNDLE_PROVIDERS = new Set(['openai', 'command-code', 'opencode-go', 'anthropic']);
-// The paid APIs a lane may keep as its last resort behind the two plan providers.
-const LAST_RESORT_PROVIDERS = new Set(['anthropic', 'openai']);
 
 function configFileName(repository) {
   const parts = (repository || '').split('/');
@@ -49,41 +47,30 @@ function validateModel(model, location) {
   if (model.reporting_calibration !== undefined && typeof model.reporting_calibration !== 'boolean') {
     throw new Error(`${location}.reporting_calibration must be a boolean.`);
   }
-  // A fallback may speak a different protocol than its lane primary; it still uses the lane's key.
+  // A model may speak a different protocol than its lane, for example a paid API behind two plans.
   if (model.protocol !== undefined && !ALLOWED_PROTOCOLS.has(model.protocol)) {
     throw new Error(`${location}.protocol is not supported.`);
   }
 }
 
-// A cross-provider fallback makes one request through a configured fixed secret slot.
-// A label identifies an explicitly different fallback model, not a provider alias.
-function validateCrossProvider(config, lane, cross, protocol, location) {
-  if (!cross || typeof cross !== 'object' || Array.isArray(cross)
-    || Object.keys(cross).some((key) => !['credential_lane', 'credential_provider', 'id', 'label'].includes(key))) {
-    throw new Error(`${location} must be an object with only credential_lane and id, optionally credential_provider and label.`);
-  }
-  if (typeof cross.id !== 'string' || !cross.id.trim()) {
-    throw new Error(`${location}.id must be a non-empty string.`);
-  }
-  if (cross.label !== undefined && (typeof cross.label !== 'string' || !cross.label.trim())) {
-    throw new Error(`${location}.label must be a non-empty string.`);
-  }
-  const target = config.lanes.find((candidate) => candidate?.id === cross.credential_lane);
-  if (!target || (cross.credential_lane === lane.id && cross.credential_provider === undefined)) {
-    throw new Error(`${location}.credential_lane must name another configured lane.`);
-  }
-  const provider = cross.credential_provider ?? target.provider;
-  if (cross.credential_provider !== undefined
-    && (!target.credential_providers?.includes(cross.credential_provider))) {
-    throw new Error(`${location}.credential_provider must name a configured provider in the target slot.`);
-  }
-  if (typeof provider !== 'string' || provider === lane.provider) {
-    throw new Error(`${location} must use a provider other than the lane's own.`);
-  }
-  if (protocol === 'google-generate-content') {
-    throw new Error(`${location} is not supported by google-generate-content.`);
-  }
-  return provider;
+// Schema 2 fields a lane no longer takes, each with what replaced it. A stale config fails here
+// instead of silently losing a route.
+const RETIRED_LANE_FIELDS = {
+  provider: 'routes[0].provider', credential_providers: 'key_slots', primary: 'model', fallbacks: 'routes',
+  last_resort: 'a routes entry with "when": "plans_spent"', key_weights: 'keys used in order', key_order: 'keys used in order',
+  resend_unserved: 'nothing (removed)',
+};
+const LANE_FIELDS = new Set(['id', 'advisory', 'protocol', 'request_timeout_ms', 'model_budget_ms', 'first_pass', 'model', 'routes']);
+// The plans a paid API sits behind, and the protocols each paid API serves.
+const PLAN_PROVIDERS = ['command-code', 'opencode-go'];
+const NATIVE_PROTOCOLS = { anthropic: ['anthropic-messages'], openai: ['openai-responses', 'openai-chat-completions'] };
+
+// The fixed secret slot a lane's request to `provider` uses: the lane's own slot when it holds that
+// provider, otherwise the first slot, in A-B-C order, that does.
+function keySlotFor(config, laneId, provider) {
+  const slots = config.key_slots || {};
+  if (slots[laneId]?.includes(provider)) return laneId;
+  return ['A', 'B', 'C'].find((id) => slots[id]?.includes(provider));
 }
 
 function validateModelOptions(config, lane, model, location) {
@@ -103,17 +90,9 @@ function validateModelOptions(config, lane, model, location) {
   if (model.temperature !== undefined && protocol === 'anthropic-messages') {
     throw new Error(`${location}.temperature is not supported by anthropic-messages.`);
   }
-  // The quota-only overflow became cross_provider; a stale config must not lose it silently.
-  if (model.quota_overflow !== undefined) {
-    throw new Error(`${location}.quota_overflow was replaced by cross_provider.`);
-  }
-  if (Array.isArray(model.cross_provider)) {
-    if (model.cross_provider.length !== 2) throw new Error(`${location}.cross_provider must list exactly two routes.`);
-    const providers = model.cross_provider.map((route, index) =>
-      validateCrossProvider(config, lane, route, protocol, `${location}.cross_provider[${index}]`));
-    if (new Set(providers).size !== providers.length) throw new Error(`${location}.cross_provider must list distinct providers.`);
-  } else if (model.cross_provider !== undefined) {
-    validateCrossProvider(config, lane, model.cross_provider, protocol, `${location}.cross_provider`);
+  // A model's other providers are the lane's routes now; a stale config must not lose them silently.
+  for (const field of ['cross_provider', 'quota_overflow']) {
+    if (model[field] !== undefined) throw new Error(`${location}.${field} was replaced by the lane's routes.`);
   }
   if (model.thinking_level === undefined) return;
   if (protocol !== 'google-generate-content') {
@@ -124,59 +103,86 @@ function validateModelOptions(config, lane, model, location) {
   }
 }
 
-// A lane's last resort (the owner's decision, 2026-11-03): a paid API behind the two plan
-// providers, asked only when the primary's own provider and its cross-provider route both report
-// a spent quota. It uses the lane's own fixed slot, as the second provider of its bundle, and may
-// lead with a first pass on a PR that has none. Its models never cross again.
-function validateLastResort(config, lane, location) {
-  const last = lane.last_resort;
-  if (!last || typeof last !== 'object' || Array.isArray(last)
-    || Object.keys(last).some((key) => !['provider', 'key_weights', 'first_pass', 'primary'].includes(key))) {
-    throw new Error(`${location}.last_resort must be an object with provider and primary, optionally key_weights and first_pass.`);
+// Each fixed secret slot holds one provider's key (a plain value) or two providers' keys (a
+// version-1 bundle). A provider may sit in more than one slot; a lane uses its own slot first.
+function validateKeySlots(config) {
+  const slots = config.key_slots;
+  if (!slots || typeof slots !== 'object' || Array.isArray(slots)) throw new Error('key_slots must map each lane id to its slot providers.');
+  const laneIds = config.lanes.map((lane) => lane?.id);
+  if (Object.keys(slots).sort().join(',') !== [...laneIds].sort().join(',')) {
+    throw new Error('key_slots must name exactly the configured lanes.');
   }
-  if (!LAST_RESORT_PROVIDERS.has(last.provider) || last.provider === lane.provider
-    || !lane.credential_providers?.includes(last.provider)) {
-    throw new Error(`${location}.last_resort.provider must be anthropic or openai, configured as the second provider of the lane's own slot.`);
-  }
-  const cross = lane.primary.cross_provider;
-  if (Array.isArray(cross)) throw new Error(`${location}.last_resort requires exactly one cross_provider route.`);
-  const crossProvider = cross && (cross.credential_provider ?? config.lanes.find((candidate) => candidate?.id === cross.credential_lane)?.provider);
-  if (!crossProvider || crossProvider === last.provider) {
-    throw new Error(`${location}.last_resort needs a primary cross_provider route on another plan provider; it serves only when both are spent.`);
-  }
-  // The gate reads the primary's own two routes, and only Go and Command Code are the plans it sits behind.
-  if ([lane.provider, crossProvider].sort().join(',') !== 'command-code,opencode-go') {
-    throw new Error(`${location}.last_resort serves only behind opencode-go and command-code: the primary and its cross_provider route must be those two plans.`);
-  }
-  if (lane.fallbacks.length || lane.first_pass !== undefined) {
-    throw new Error(`${location}.last_resort needs a lane without fallbacks or first_pass; its gate judges the primary's two routes alone.`);
-  }
-  if (last.key_weights !== undefined && (!Array.isArray(last.key_weights) || last.key_weights.length < 2 || last.key_weights.length > 4
-    || last.key_weights.some((weight) => !Number.isInteger(weight) || weight < 1 || weight > 100))) {
-    throw new Error(`${location}.last_resort.key_weights must be an array of 2 to 4 integers from 1 to 100.`);
-  }
-  const entries = [[last.primary, `${location}.last_resort.primary`],
-    ...(last.first_pass === undefined ? [] : [[last.first_pass, `${location}.last_resort.first_pass`]])];
-  // A model inherits the lane's protocol, which belongs to the plan provider; the paid API must speak its own.
-  const nativeProtocols = { anthropic: ['anthropic-messages'], openai: ['openai-responses', 'openai-chat-completions'] }[last.provider];
-  for (const [model, modelLocation] of entries) {
-    validateModel(model, modelLocation);
-    if (model.cross_provider !== undefined) throw new Error(`${modelLocation} cannot configure cross_provider; the last resort never crosses.`);
-    if (!nativeProtocols.includes(model.protocol ?? lane.protocol)) {
-      throw new Error(`${modelLocation} must use a protocol ${last.provider} serves (${nativeProtocols.join(' or ')}); set protocol when the lane's differs.`);
+  for (const [id, providers] of Object.entries(slots)) {
+    if (!Array.isArray(providers) || providers.length < 1 || providers.length > 2 || new Set(providers).size !== providers.length
+      || providers.some((provider) => typeof provider !== 'string' || !provider.trim())
+      || (providers.length === 2 && providers.some((provider) => !BUNDLE_PROVIDERS.has(provider)))) {
+      throw new Error(`key_slots.${id} must list one provider, or two of openai, command-code, opencode-go and anthropic for a bundle.`);
     }
-    validateModelOptions(config, lane, model, modelLocation);
   }
-  if (last.first_pass !== undefined && last.first_pass.id === last.primary.id) {
-    throw new Error(`${location}.last_resort.first_pass must name a model other than its primary.`);
-  }
+}
+
+// A lane's routes are the providers it asks, in order, each once with the lane's model. A later
+// route may name the model's id on its provider; a label marks an explicitly different model. The
+// last route may be a paid API asked only when the two plans before it both report a spent quota;
+// it may bring its own model and a first pass for a PR that has none.
+function validateRoutes(config, lane, location) {
+  const routes = lane.routes;
+  if (!Array.isArray(routes) || routes.length < 1 || routes.length > 3) throw new Error(`${location}.routes must list one to three providers.`);
+  const protocol = lane.model.protocol ?? lane.protocol;
+  routes.forEach((route, index) => {
+    const at = `${location}.routes[${index}]`;
+    if (!route || typeof route !== 'object' || Array.isArray(route)) throw new Error(`${at} must be an object.`);
+    const gated = route.when !== undefined;
+    const allowed = gated ? ['provider', 'when', 'model', 'first_pass'] : index === 0 ? ['provider'] : ['provider', 'id', 'label'];
+    if (Object.keys(route).some((key) => !allowed.includes(key))) {
+      throw new Error(`${at} may only set ${allowed.join(', ')}.`);
+    }
+    if (typeof route.provider !== 'string' || !route.provider.trim()) throw new Error(`${at}.provider must be non-empty.`);
+    if (!keySlotFor(config, lane.id, route.provider)) throw new Error(`${at}.provider ${route.provider} is not in any key slot.`);
+    for (const field of ['id', 'label']) {
+      if (route[field] !== undefined && (typeof route[field] !== 'string' || !route[field].trim())) {
+        throw new Error(`${at}.${field} must be a non-empty string.`);
+      }
+    }
+    if (index > 0 && !gated && protocol === 'google-generate-content') {
+      throw new Error(`${at} is not supported by google-generate-content.`);
+    }
+    if (!gated) return;
+    if (route.when !== 'plans_spent') throw new Error(`${at}.when must be "plans_spent".`);
+    if (index !== routes.length - 1 || !NATIVE_PROTOCOLS[route.provider]) {
+      throw new Error(`${at} must be the last route and a paid API (anthropic or openai).`);
+    }
+    // The gate reads the routes before it, and only Go and Command Code are the plans it sits behind.
+    if (routes.slice(0, index).map((earlier) => earlier.provider).sort().join(',') !== PLAN_PROVIDERS.join(',')) {
+      throw new Error(`${at} serves only behind opencode-go and command-code: the routes before it must be those two plans.`);
+    }
+    if (lane.first_pass !== undefined) {
+      throw new Error(`${at} needs a lane without first_pass; its gate judges the plan routes alone.`);
+    }
+    const served = route.model ?? lane.model;
+    const entries = [[served, route.model ? `${at}.model` : `${location}.model`],
+      ...(route.first_pass === undefined ? [] : [[route.first_pass, `${at}.first_pass`]])];
+    for (const [model, modelLocation] of entries) {
+      validateModel(model, modelLocation);
+      // A model inherits the lane's protocol, which belongs to the plan provider; the paid API must speak its own.
+      if (!NATIVE_PROTOCOLS[route.provider].includes(model.protocol ?? lane.protocol)) {
+        throw new Error(`${modelLocation} must use a protocol ${route.provider} serves (${NATIVE_PROTOCOLS[route.provider].join(' or ')}); set protocol when the lane's differs.`);
+      }
+      validateModelOptions(config, lane, model, modelLocation);
+    }
+    if (route.first_pass !== undefined && route.first_pass.id === served.id) {
+      throw new Error(`${at}.first_pass must name a model other than the model it leads.`);
+    }
+  });
+  const providers = routes.map((route) => route.provider);
+  if (new Set(providers).size !== providers.length) throw new Error(`${location}.routes must list distinct providers.`);
 }
 
 function validateConfig(config, repository) {
   if (!config || typeof config !== 'object' || Array.isArray(config)) {
     throw new Error('Repository config must be a JSON object.');
   }
-  if (config.schema_version !== 1) throw new Error('Unsupported repository config schema_version.');
+  if (config.schema_version !== 2) throw new Error('Unsupported repository config schema_version; schema 2 lists each lane\'s routes.');
   if (config.repository !== repository) {
     throw new Error(`Config repository mismatch: expected ${repository}, found ${config.repository || '<empty>'}.`);
   }
@@ -210,32 +216,15 @@ function validateConfig(config, repository) {
     if (!ALLOWED_LANES.has(lane.id)) throw new Error(`${location}.id must be A, B, or C.`);
     if (laneIds.has(lane.id)) throw new Error(`Lane ${lane.id} is configured more than once.`);
     laneIds.add(lane.id);
-    if (typeof lane.provider !== 'string' || !lane.provider.trim()) throw new Error(`${location}.provider must be non-empty.`);
-    if (lane.credential_providers !== undefined
-      && (!Array.isArray(lane.credential_providers) || lane.credential_providers.length !== 2
-        || new Set(lane.credential_providers).size !== 2
-        || lane.credential_providers.some((provider) => !BUNDLE_PROVIDERS.has(provider))
-        || !lane.credential_providers.includes(lane.provider) || lane.key_weights !== undefined)) {
-      throw new Error(`${location}.credential_providers must name two of openai, command-code, opencode-go and anthropic, include the lane provider, and cannot use key_weights.`);
+  }
+  validateKeySlots(config);
+  for (const [index, lane] of config.lanes.entries()) {
+    const location = `lanes[${index}]`;
+    for (const field of Object.keys(lane)) {
+      if (Object.hasOwn(RETIRED_LANE_FIELDS, field)) throw new Error(`${location}.${field} was replaced by ${RETIRED_LANE_FIELDS[field]} in schema 2.`);
+      if (!LANE_FIELDS.has(field)) throw new Error(`${location}.${field} is not a lane field.`);
     }
     if (lane.advisory !== undefined && typeof lane.advisory !== 'boolean') throw new Error(`${location}.advisory must be a boolean.`);
-    if (lane.resend_unserved !== undefined && typeof lane.resend_unserved !== 'boolean') {
-      throw new Error(`${location}.resend_unserved must be a boolean.`);
-    }
-    // A lane's secret slot may hold several keys of one provider, one per line (separate accounts).
-    // The weights split PRs between them in order; a key past the list counts 1.
-    if (lane.key_weights !== undefined && (!Array.isArray(lane.key_weights) || lane.key_weights.length < 2 || lane.key_weights.length > 4
-      || lane.key_weights.some((weight) => !Number.isInteger(weight) || weight < 1 || weight > 100))) {
-      throw new Error(`${location}.key_weights must be an array of 2 to 4 integers from 1 to 100.`);
-    }
-    // Or the lane's own keys are used in order: every PR starts on the first, and a later key only
-    // takes a request the one before it could not serve for an account reason.
-    if (lane.key_order !== undefined && lane.key_order !== 'sequential') {
-      throw new Error(`${location}.key_order must be "sequential" when configured.`);
-    }
-    if (lane.key_order !== undefined && lane.key_weights !== undefined) {
-      throw new Error(`${location}.key_order cannot be combined with key_weights.`);
-    }
     if (!ALLOWED_PROTOCOLS.has(lane.protocol)) throw new Error(`${location}.protocol is not supported.`);
     for (const field of ['request_timeout_ms', 'model_budget_ms']) {
       if (lane[field] !== undefined && (!Number.isInteger(lane[field]) || lane[field] < 1)) {
@@ -246,28 +235,16 @@ function validateConfig(config, repository) {
       && lane.model_budget_ms < lane.request_timeout_ms) {
       throw new Error(`${location}.model_budget_ms must be greater than or equal to request_timeout_ms.`);
     }
-    validateModel(lane.primary, `${location}.primary`);
-    if (!Array.isArray(lane.fallbacks)) throw new Error(`${location}.fallbacks must be an array.`);
-    if (lane.fallbacks.length > 1) throw new Error(`${location} supports at most one fallback.`);
-    lane.fallbacks.forEach((model, modelIndex) => validateModel(model, `${location}.fallbacks[${modelIndex}]`));
-    // An optional first pass reviews a PR's first commit ahead of the primary, on the lane's own
-    // provider and key. Later commits go straight to the primary, so it has no cross-provider
-    // fallback of its own: when it cannot serve, the lane's normal chain does.
-    const modelEntries = [[lane.primary, `${location}.primary`],
-      ...lane.fallbacks.map((model, modelIndex) => [model, `${location}.fallbacks[${modelIndex}]`])];
+    validateModel(lane.model, `${location}.model`);
+    validateModelOptions(config, lane, lane.model, `${location}.model`);
+    // An optional first pass reviews a PR's first commit ahead of the model, on the lane's first
+    // route only. Later commits go straight to the model, so when it cannot serve, the routes do.
     if (lane.first_pass !== undefined) {
       validateModel(lane.first_pass, `${location}.first_pass`);
-      if (lane.first_pass.cross_provider !== undefined) {
-        throw new Error(`${location}.first_pass cannot configure cross_provider; the lane's own chain serves when it cannot.`);
-      }
-      modelEntries.unshift([lane.first_pass, `${location}.first_pass`]);
+      validateModelOptions(config, lane, lane.first_pass, `${location}.first_pass`);
+      if (lane.first_pass.id === lane.model.id) throw new Error(`Lane ${lane.id} contains a duplicate first-pass/model id.`);
     }
-    for (const [model, modelLocation] of modelEntries) validateModelOptions(config, lane, model, modelLocation);
-    const ids = modelEntries.map(([model]) => model.id);
-    if (new Set(ids).size !== ids.length) {
-      throw new Error(`Lane ${lane.id} contains a duplicate first-pass/primary/fallback model id.`);
-    }
-    if (lane.last_resort !== undefined) validateLastResort(config, lane, location);
+    validateRoutes(config, lane, location);
   }
   // Advisory lanes never gate a review, so a config where every lane is advisory has no
   // enforcement left at all. Reject it here rather than let it degrade silently.
@@ -311,4 +288,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { configFileName, loadConfig, validateConfig, run };
+module.exports = { configFileName, loadConfig, validateConfig, keySlotFor, run };

@@ -17,20 +17,20 @@ function fixture({ stale = false, fail = false, comments = [] } = {}) {
   } };
   const publisher = createStatusPublisher({ github, owner: 'TshyGO', repo: 'sample', pullNumber: 1,
     head, workflow: 'c'.repeat(40), runUrl: 'https://github.com/TshyGO/sample/actions/runs/1', runId: 1,
-    lanes: ['A', 'B', 'C'].map((id) => ({ id, primary: { id: 'primary-' + id } })),
+    lanes: ['A', 'B', 'C'].map((id) => ({ id, model: { id: 'primary-' + id } })),
     reusableLaneIds: new Set(), comments, quorum: 2, logger: { log: (text) => logs.push(text) } });
   return { publisher, writes, logs, deleted };
 }
-test('one current-head summary distinguishes running, fallback and completed lanes', async () => {
+test('one current-head summary distinguishes running, cross-provider and completed lanes', async () => {
   const { publisher, writes } = fixture();
   await publisher.publish();
   assert.ok(writes[0].startsWith(MARKER));
   assert.ok(writes[0].includes(head));
   assert.ok(writes[0].includes('主模型运行中'));
   await publisher.update('A', 'complete', 'primary-A');
-  await publisher.update('B', 'fallback', 'fallback-B');
+  await publisher.update('B', 'cross', 'fallback-B');
   assert.ok(writes.at(-1).includes('| A | primary-A | 已生成，证据格式已校验 | primary-A |'));
-  assert.ok(writes.at(-1).includes('| B | primary-B | 备用模型运行中 | fallback-B |'));
+  assert.ok(writes.at(-1).includes('| B | primary-B | 本供应商未产生可用审核，同模型经另一供应商运行中 | fallback-B |'));
   await publisher.update('B', 'complete', 'fallback-B');
   await publisher.update('C', 'failed');
   assert.ok(writes.at(-1).includes('有效发布：2/3；至少需要 2 路'));
