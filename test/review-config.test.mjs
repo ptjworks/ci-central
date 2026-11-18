@@ -68,7 +68,7 @@ for (const repository of repositories) {
   // The owner's decision, 2026-11-03: with Command Code and OpenCode Go both spent, the other
   // repositories fall back once more to paid APIs, and only then. Lane A has none. Lane B asks
   // Haiku 5.5 alone on the Anthropic API (the two NebulaLab accounts, 2:1); Lane C asks OpenAI
-  // under NebulaLab's rule, GPT-6.1 Sol at high for a PR's first pass and GPT-6 Luna at xhigh after.
+  // for GPT-6.1 Sol at high on a PR's first pass and GPT-6 Luna at xhigh after.
   // NebulaLab already reviews on both APIs first and keeps no last resort.
   assert.deepEqual(fromSource.lanes.map((lane) => lane.credential_providers ?? null), onAnthropic
     ? [null, null, ['openai', 'command-code']]
@@ -87,7 +87,7 @@ for (const repository of repositories) {
   assert.equal(fromSource.lanes[2].primary.protocol ?? fromSource.lanes[2].protocol, 'openai-responses',
     `${repository} GPT-6 Luna must be asked over Responses on both providers`);
   assert.equal(fromSource.lanes[2].primary.max_output_tokens, 65536);
-  assert.deepEqual(fromSource.lanes.map((lane) => lane.first_pass?.id ?? null), [null, onAnthropic ? 'claude-sonnet-5-5' : null, onAnthropic ? 'gpt-6.1-sol' : null],
+  assert.deepEqual(fromSource.lanes.map((lane) => lane.first_pass?.id ?? null), [null, onAnthropic ? 'claude-sonnet-5-5' : null, onAnthropic ? 'gpt-6.2-sol' : null],
     `${repository} only NebulaLab's Lanes B/C have first passes`);
   // Lane C's unserved resend was dropped: each lane is one request on its own provider, then one on the other.
   assert.ok(fromSource.lanes.every((lane) => lane.resend_unserved === undefined), `${repository} no lane resends on the same provider`);
@@ -208,6 +208,7 @@ const inputTokenRoom = {
   'gpt-6-luna': 1000000,
   'gpt-6.1-sol': 1000000,
   'gpt-6.1-terra': 1050000,
+  'gpt-6.2-sol': 922000, // Published input limit, with up to 128K output in a 1.05M-token window.
 };
 const sharesWindowWithOutput = new Set(['kimi-k2.7-code', 'claude-haiku-5-5', 'claude-sonnet-5-5', 'tencent/hy3-paid', 'z-ai/glm-5.3-flash', 'moonshotai/Kimi-K2.7-Code', 'gpt-6-luna', 'gpt-6.1-sol', 'gpt-6.1-terra']);
 for (const repository of repositories) {
@@ -247,7 +248,8 @@ assert.equal(nebula.lanes[0].provider, 'opencode-go');
 assert.equal(nebula.lanes[1].provider, 'anthropic');
 assert.equal(nebula.lanes[2].provider, 'openai');
 assert.deepEqual(nebula.lanes[2].credential_providers, ['openai', 'command-code']);
-assert.equal(nebula.lanes[2].first_pass.id, 'gpt-6.1-sol');
+assert.equal(nebula.lanes[2].first_pass.id, 'gpt-6.2-sol');
+assert.equal(nebula.lanes[2].first_pass.label, 'GPT-6.2 Sol');
 assert.equal(nebula.lanes[2].first_pass.reasoning_effort, 'high');
 assert.equal(nebula.lanes[2].primary.reasoning_effort, 'high');
 assert.deepEqual(nebula.lanes.map((lane) => lane.protocol), ['openai-responses', 'anthropic-messages', 'openai-responses']);

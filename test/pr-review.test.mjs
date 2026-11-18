@@ -2373,24 +2373,30 @@ const openaiEgress = { ...twEgress, PR_REVIEW_CONFIG: JSON.stringify(nebulaConfi
   LANE_C_API_BASE: providerBundle({ openai: 'https://lane-c.openai.example.test/v1', 'command-code': 'https://lane-c.cc.example.test/v1' }) };
 const laneCBody = (result) => result.posted.find((body) => body.startsWith('<!-- ai-pr-review-bot:lane-C -->')) || '';
 const laneCCalls = (result) => result.captured.filter((call) => call.lane === 'C' || (call.lane === 'A' && call.model === 'gpt-6-luna'));
-r = await scenario(healthy, openaiEgress, { useBundle: true });
+r = await scenario(healthy, openaiEgress, atHead(H1, { useBundle: true }));
 const solFirst = laneCBody(r);
-check('NebulaLab C: Sol alone performs the first pass on OpenAI with high reasoning', !r.error
-  && laneCCalls(r).length === 1 && laneCCalls(r)[0].model === 'gpt-6.1-sol'
+check('NebulaLab C: GPT-6.2 Sol alone performs the first pass on OpenAI with high reasoning', !r.error
+  && laneCCalls(r).length === 1 && laneCCalls(r)[0].model === 'gpt-6.2-sol'
   && laneCCalls(r)[0].body.reasoning?.effort === 'high'
   && laneCCalls(r)[0].headers.authorization === 'Bearer openai-test-key'
-  && solFirst.includes('ai-pr-review-first-pass:v1 lane=C') && solFirst.includes('status=valid'));
-r = await scenario(healthy, openaiEgress, { useBundle: true, files: [patch('src/a.ts', 101), patch('tests/a.test.ts', 100)], comments: [{ body: solFirst }], pulls: [{ ...pull, head: { ...pull.head, sha: H2 } }],
-  context: { ...context, payload: { pull_request: { number: 42, head: { sha: H2 } } } } });
-check('NebulaLab C: subsequent heads use Terra high on OpenAI and preserve the Sol first pass', !r.error
-  && laneCCalls(r).map((call) => call.model).join(',') === 'gpt-6.1-terra'
-  && laneCCalls(r)[0].headers.authorization === 'Bearer openai-test-key'
-  && laneCCalls(r)[0].body.reasoning?.effort === 'high' && laneCBody(r).includes('model=gpt-6.1-sol'));
+  && solFirst.includes(`ai-pr-review-first-pass:v1 lane=C head=${H1} model=gpt-6.2-sol`)
+  && solFirst.includes('GPT-6.2 Sol') && solFirst.includes('status=valid'));
+for (const model of ['gpt-6.2-sol', 'gpt-6.1-sol']) {
+  const firstPass = model === 'gpt-6.2-sol' ? solFirst
+    : solFirst.replaceAll('gpt-6.2-sol', model).replaceAll('GPT-6.2 Sol', 'GPT-6.1 Sol');
+  r = await scenario(healthy, openaiEgress, atHead(H2, { useBundle: true,
+    files: [patch('src/a.ts', 101), patch('tests/a.test.ts', 100)], comments: [{ body: firstPass }] }));
+  check(`NebulaLab C: subsequent heads use Terra high on OpenAI and preserve the ${model} first pass`, !r.error
+    && laneCCalls(r).map((call) => call.model).join(',') === 'gpt-6.1-terra'
+    && laneCCalls(r)[0].headers.authorization === 'Bearer openai-test-key'
+    && laneCCalls(r)[0].body.reasoning?.effort === 'high'
+    && laneCBody(r).includes(`ai-pr-review-first-pass:v1 lane=C head=${H1} model=${model}`));
+}
 const openaiUnavailable = (call) => call.url.startsWith('https://lane-c.openai.');
 const lunaOnLaneAGo = (call) => call.lane === 'A' && call.model === 'gpt-6-luna';
 r = await scenario((call) => openaiUnavailable(call) ? reply(503, 'unavailable') : healthy(call), openaiEgress);
 check('NebulaLab C: failed Sol tries Terra on OpenAI before Luna on Go', !r.error
-  && laneCCalls(r).map((call) => call.model).join(',') === 'gpt-6.1-sol,gpt-6.1-terra,gpt-6-luna'
+  && laneCCalls(r).map((call) => call.model).join(',') === 'gpt-6.2-sol,gpt-6.1-terra,gpt-6-luna'
   && laneCCalls(r).map((call) => call.headers.authorization).join(',') === 'Bearer openai-test-key,Bearer openai-test-key,Bearer lane-a-key'
   && laneCBody(r).includes('GPT-6 Luna') && r.statusUpdates.at(-1).includes('gpt-6-luna via opencode-go'));
 const unnamedFallback = structuredClone(nebulaConfig);
@@ -2404,7 +2410,7 @@ check('an unlabeled alternate model is reported using its actual route id', !r.e
 r = await scenario((call) => openaiUnavailable(call) ? reply(503, 'unavailable')
   : lunaOnLaneAGo(call) ? reply(429, '{"error":{"type":"GoUsageLimitError","message":"Go usage limit exceeded"}}') : healthy(call), openaiEgress);
 check('NebulaLab C: when Go is spent, one Luna request on CC is the final attempt', !r.error
-  && laneCCalls(r).map((call) => call.model).join(',') === 'gpt-6.1-sol,gpt-6.1-terra,gpt-6-luna,gpt-6-luna'
+  && laneCCalls(r).map((call) => call.model).join(',') === 'gpt-6.2-sol,gpt-6.1-terra,gpt-6-luna,gpt-6-luna'
   && laneCCalls(r).map((call) => call.headers.authorization).join(',') === 'Bearer openai-test-key,Bearer openai-test-key,Bearer lane-a-key,Bearer cc-test-key'
   && laneCCalls(r).every((call) => call.body.reasoning?.effort === 'high')
   && !laneCBody(r).includes('ai-pr-review-first-pass:v1 lane=C')
@@ -2418,8 +2424,8 @@ check('NebulaLab B: Anthropic failure tries Haiku on Go and stops when it serves
 r = await scenario((call) => call.lane !== 'C' ? reply(503, 'unavailable') : healthy(call), openaiEgress);
 check('NebulaLab: A crosses to CC and B crosses to Go then CC, using only their own models', !r.error
   && r.captured.filter((call) => call.model === 'claude-haiku-5-5').map((call) => call.lane).join(',') === 'B,A,C'
-  && r.captured.filter((call) => call.lane === 'C' && call.model !== 'gpt-6.1-sol').map((call) => call.model).sort().join(',') === 'claude-haiku-5-5,meta/muse-spark-1.3-contributor'
-  && r.captured.filter((call) => call.lane === 'C' && call.model !== 'gpt-6.1-sol').every((call) => call.headers.authorization === 'Bearer cc-test-key' || call.headers['x-api-key'] === 'cc-test-key'));
+  && r.captured.filter((call) => call.lane === 'C' && call.model !== 'gpt-6.2-sol').map((call) => call.model).sort().join(',') === 'claude-haiku-5-5,meta/muse-spark-1.3-contributor'
+  && r.captured.filter((call) => call.lane === 'C' && call.model !== 'gpt-6.2-sol').every((call) => call.headers.authorization === 'Bearer cc-test-key' || call.headers['x-api-key'] === 'cc-test-key'));
 r = await scenario(healthy, { ...openaiEgress, LANE_C_KEY: '{never-echo-this-secret' });
 check('NebulaLab: malformed C bundles disable C while A/B continue without exposing input', !r.error
   && r.captured.map((call) => call.lane).sort().join(',') === 'A,B'
@@ -2456,7 +2462,7 @@ const leaksOpenaiKey = (result) => [...result.posted, ...result.statusUpdates, .
 for (const number of [42, 43]) {
   r = await scenario(healthy, openaiTwoKeys, prNumbered(number));
   check(`NebulaLab C: PR #${number} starts on the first of two OpenAI keys used in order`, !r.error
-    && laneCKeys(r) === 'gpt-6.1-sol@openai-one' && laneCBody(r).includes('· key 1/2 ·')
+    && laneCKeys(r) === 'gpt-6.2-sol@openai-one' && laneCBody(r).includes('· key 1/2 ·')
     && r.logs.some((line) => line.includes(`[Lane C] the secret slot holds 2 keys, used in order; PR #${number} starts on key 1.`))
     && !leaksOpenaiKey(r));
 }
@@ -2464,16 +2470,16 @@ const openaiSpent = () => reply(429, '{"error":{"code":"insufficient_quota","typ
 for (const useBundle of [false, true]) {
   r = await scenario((call) => keyOf(call) === 'openai-one' ? openaiSpent() : healthy(call), openaiTwoKeys, prNumbered(43, { useBundle }));
   check(`NebulaLab C: a spent first OpenAI key sends the same Sol request once with key 2 and never crosses to Luna (bundle ${useBundle})`, !r.error
-    && laneCKeys(r) === 'gpt-6.1-sol@openai-one,gpt-6.1-sol@openai-two'
+    && laneCKeys(r) === 'gpt-6.2-sol@openai-one,gpt-6.2-sol@openai-two'
     && laneCBody(r).includes('status=valid') && laneCBody(r).includes('ai-pr-review-first-pass:v1 lane=C')
     && laneCBody(r).includes('· key 2/2 ·') && laneCBody(r).includes('> ℹ️ Lane C 的第 1 把 key 未能服务（')
-    && r.logs.some((line) => line.includes('[Lane C/gpt-6.1-sol] key 1 of 2 could not serve'))
+    && r.logs.some((line) => line.includes('[Lane C/gpt-6.2-sol] key 1 of 2 could not serve'))
     && !leaksOpenaiKey(r));
 }
-r = await scenario((call) => call.url.startsWith('https://lane-c.openai.') && call.model === 'gpt-6.1-sol' ? reply(503, 'unavailable') : healthy(call),
+r = await scenario((call) => call.url.startsWith('https://lane-c.openai.') && call.model === 'gpt-6.2-sol' ? reply(503, 'unavailable') : healthy(call),
   openaiTwoKeys, prNumbered(43));
 check('NebulaLab C: an OpenAI-side failure does not switch keys, and Terra follows on key 1', !r.error
-  && laneCKeys(r) === 'gpt-6.1-sol@openai-one,gpt-6.1-terra@openai-one' && !laneCBody(r).includes('把 key 未能服务'));
+  && laneCKeys(r) === 'gpt-6.2-sol@openai-one,gpt-6.1-terra@openai-one' && !laneCBody(r).includes('把 key 未能服务'));
 const sequentialGo = structuredClone(centralConfig);
 sequentialGo.lanes[1].key_order = 'sequential';
 r = await scenario(healthy, { ...goTwoKeys, PR_REVIEW_CONFIG: JSON.stringify(sequentialGo) }, prNumbered(43));
