@@ -7,7 +7,7 @@ provider bundles, for a last resort only (see the end of this page).
 | --- | --- | --- | --- |
 | A | Muse Spark 1.3 Contributor on Go | Same | CC through C / command-code |
 | B | Sonnet 5.5 on Anthropic | Haiku 5.5 on Anthropic | Haiku on Go (A), then Command Code (C) |
-| C | GPT-6.1 Sol on OpenAI, high reasoning | GPT-6.1 Terra on OpenAI, high reasoning | GPT-6 Luna high on Go (A), then Command Code (C) |
+| C | GPT-6.2 Sol on OpenAI, high reasoning | GPT-6.1 Terra on OpenAI, high reasoning | GPT-6 Luna high on Go (A), then Command Code (C) |
 
 First-pass models never cross providers. Failure enters the regular model chain in
 the same round. Only a valid first pass records completion; otherwise the next push
@@ -16,11 +16,12 @@ Existing PRs without a C first-pass marker receive Sol at their next review. A S
 marker or a historical Terra first-pass marker from the October rollout still
 records completion. Its report remains folded on later reviews.
 
-Since 2026-11-07, NebulaLab uses Sol high for the first pass and Terra high for
-subsequent reviews. When Sol cannot produce a usable first pass, the same round tries
-Terra on OpenAI before it can cross to Luna. NebulaLab B and C try Go first and
-only reach Command Code if Go cannot produce a usable review. The other repositories'
-quota-only OpenAI last resort still uses Sol high followed by Luna xhigh. Their
+NebulaLab uses GPT-6.2 Sol high for the first pass and Terra high for subsequent
+reviews. The first-pass upgrade from GPT-6.1 Sol honors completed first passes
+from the previous model. When Sol cannot produce a usable first pass, the same
+round tries Terra on OpenAI before it can cross to Luna. NebulaLab B and C try Go
+first and only reach Command Code if Go cannot produce a usable review. The other repositories'
+quota-only OpenAI last resort uses GPT-6.1 Sol high followed by Luna xhigh. Their
 planned OpenAI allowance is shared with NebulaLab. Historical
 Terra/medium acceptance records under `docs/validation/nebulalab-openai-c/` remain
 unchanged and do not validate the upgraded model settings.
