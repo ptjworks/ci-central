@@ -36,8 +36,8 @@ assert.match(probeScript, /elseif \(\$protocol -eq 'anthropic-messages'\)[\s\S]*
 
 // Every model a lane may serve: its first pass, its model, and a paid route's own models.
 const modelsOf = (lane) => [lane.first_pass, lane.model, ...lane.routes.flatMap((route) => [route.first_pass, route.model])].filter(Boolean);
-const LUNA = { id: 'gpt-6-luna', label: 'GPT-6 Luna', context_profile: 'full', max_output_tokens: 65536, reporting_calibration: true, reasoning_effort: 'xhigh' };
-const SOL = { id: 'gpt-6.1-sol', label: 'GPT-6.1 Sol', context_profile: 'full', max_output_tokens: 65536, reporting_calibration: true, reasoning_effort: 'high' };
+const LUNA = { id: 'gpt-6-luna', label: 'GPT-6 Luna', protocol: 'openai-responses', context_profile: 'full', max_output_tokens: 65536, reporting_calibration: true, reasoning_effort: 'xhigh' };
+const SOL = { id: 'gpt-6.1-sol', label: 'GPT-6.1 Sol', protocol: 'openai-responses', context_profile: 'full', max_output_tokens: 65536, reporting_calibration: true, reasoning_effort: 'high' };
 
 // NebulaLab's Lane B runs on Anthropic: Sonnet 5.5 reviews each PR's first commit and Haiku 5.5
 // the later ones, on one provider and key. The other repositories keep Haiku on OpenCode Go.
@@ -50,7 +50,7 @@ for (const repository of repositories) {
   assert.equal(fromSource.review_policy.max_attempts, 1);
   assert.deepEqual(fromBundle, fromSource, `${repository} source and dist loaders disagree`);
   assert.deepEqual(fromSource.lanes.map((lane) => lane.id), ['A', 'B', 'C']);
-  const cModel = onAnthropic ? 'gpt-6.1-terra' : 'gpt-6-luna';
+  const cModel = onAnthropic ? 'gpt-6.1-terra' : 'minimax-m3.1-flash';
   assert.deepEqual(fromSource.lanes.map((lane) => lane.model.id), ['muse-spark-1.3-contributor', 'claude-haiku-5-5', cModel]);
   // Which providers each fixed slot holds. A slot with two is a version-1 bundle. NebulaLab keeps
   // one Go key, its Anthropic accounts and an OpenAI + Command Code bundle; the others keep a Go key,
@@ -62,8 +62,9 @@ for (const repository of repositories) {
   // 2026-10-18): when a provider yields no usable review, for any reason, the next one gets the
   // same request. Outside NebulaLab, Lanes B and C end with a paid API asked only when both plans
   // report a spent quota (2026-11-03): Haiku on Anthropic, and on OpenAI GPT-6.1 Sol for a PR's
-  // first pass and GPT-6 Luna at xhigh after. NebulaLab reviews on both APIs first; its Lane C
-  // falls back to GPT-6 Luna, labelled, on Go and Command Code.
+  // first pass and GPT-6 Luna at xhigh after. Their Lane C runs MiniMax M3.1 Flash on Go first
+  // (2026-11-18), with Go's key from the Lane A slot. NebulaLab reviews on both APIs first; its
+  // Lane C falls back to GPT-6 Luna, labelled, on Go and Command Code.
   assert.deepEqual(fromSource.lanes.map((lane) => lane.routes), onAnthropic ? [
     [{ provider: 'opencode-go' }, { provider: 'command-code', id: 'meta/muse-spark-1.3-contributor' }],
     [{ provider: 'anthropic' }, { provider: 'opencode-go' }, { provider: 'command-code' }],
@@ -72,21 +73,24 @@ for (const repository of repositories) {
   ] : [
     [{ provider: 'opencode-go' }, { provider: 'command-code', id: 'meta/muse-spark-1.3-contributor' }],
     [{ provider: 'opencode-go' }, { provider: 'command-code' }, { provider: 'anthropic', when: 'plans_spent' }],
-    [{ provider: 'command-code' }, { provider: 'opencode-go' }, { provider: 'openai', when: 'plans_spent', model: LUNA, first_pass: SOL }],
+    [{ provider: 'opencode-go' }, { provider: 'command-code', id: 'minimax/minimax-m3.1-flash' }, { provider: 'openai', when: 'plans_spent', model: LUNA, first_pass: SOL }],
   ], `${repository} lane routes changed`);
-  assert.deepEqual(fromSource.lanes.map((lane) => lane.protocol), ['openai-responses', 'anthropic-messages', 'openai-responses']);
-  // Go serves GPT-6 Luna only over Responses (Chat Completions returns 400 ModelProtocolUnsupported),
-  // and every route reuses the model's protocol, so no model-level override may move it back.
-  assert.equal(fromSource.lanes[2].model.protocol ?? fromSource.lanes[2].protocol, 'openai-responses',
-    `${repository} Lane C must be asked over Responses on every route`);
-  assert.equal(fromSource.lanes[2].model.max_output_tokens, 65536);
+  // Go serves GPT-6 Luna only over Responses (Chat Completions returns 400 ModelProtocolUnsupported)
+  // and MiniMax M3.1 Flash only over Chat Completions; every route reuses the model's protocol.
+  assert.deepEqual(fromSource.lanes.map((lane) => lane.model.protocol ?? lane.protocol),
+    ['openai-responses', 'anthropic-messages', onAnthropic ? 'openai-responses' : 'openai-chat-completions'], `${repository} lane protocols changed`);
+  // MiniMax thought for up to 56,177 tokens and wrote up to 57,913 on ci-central #86 (2026-11-18), close
+  // to the 65,536 GPT-6 Luna keeps; it accepts up to 512K, so it gets 131,072.
+  assert.equal(fromSource.lanes[2].model.max_output_tokens, onAnthropic ? 65536 : 131072);
   assert.deepEqual(fromSource.lanes.map((lane) => lane.first_pass?.id ?? null), [null, onAnthropic ? 'claude-sonnet-5-5' : null, onAnthropic ? 'gpt-6.2-sol' : null],
     `${repository} only NebulaLab's Lanes B/C have first passes`);
   // Haiku at max effort spent all 65,536 output tokens thinking on three large NebulaLab PRs; high finished them.
   assert.equal(fromSource.lanes[1].model.effort, 'high', `${repository} Haiku must stay at high effort`);
-  assert.equal(fromSource.lanes[0].model.reasoning_effort, onAnthropic ? undefined : 'xhigh',
-    `${repository} Muse effort must follow its review policy`);
-  assert.equal(fromSource.lanes[2].model.reasoning_effort, 'high',
+  // Muse runs at xhigh everywhere (NebulaLab since 2026-11-18).
+  assert.equal(fromSource.lanes[0].model.reasoning_effort, 'xhigh', `${repository} Muse effort must follow its review policy`);
+  // MiniMax thinks deepest with no effort sent: explicit high and xhigh thought less and found
+  // fewer seeded defects (2/5, 3/5 against 4/5), and max matched the default (2026-11-18).
+  assert.equal(fromSource.lanes[2].model.reasoning_effort, onAnthropic ? 'high' : undefined,
     `${repository} Lane C effort must follow its review policy`);
   // Calibration took Muse and Hy3 from near-silent to 1-5 findings on large NebulaLab PRs with no
   // high-confidence clean-change noise; on Haiku it only added noise. GPT-6 Luna took over Lane C
@@ -129,8 +133,8 @@ for (const repository of repositories) {
   assert.equal(config.lanes[1].model.max_output_tokens, 120000, `${repository} Lane B must preserve the Haiku output ceiling`);
   assert.equal(config.lanes[1].request_timeout_ms, 1800000, `${repository} Lane B preserves reasoning with a thirty-minute request ceiling`);
   assert.equal(config.lanes[1].model_budget_ms, 1800000, `${repository} Lane B model budget matches its request ceiling`);
-  // Measured 2026-10-15: calibrated Hy3 finished three large NebulaLab PRs in 115-156 s; on
-  // 2026-10-19 GPT-6 Luna finished the same three on Go in 68-107 s. Lane C keeps fifteen
+  // Measured 2026-10-19: GPT-6 Luna finished three large NebulaLab PRs on Go in 68-107 s. On
+  // 2026-11-18 MiniMax M3.1 Flash took 166-609 s on four ci-central PRs. Lane C keeps fifteen
   // minutes on each provider.
   assert.equal(config.lanes[2].request_timeout_ms, 900000, `${repository} Lane C request budget changed without a measurement behind it`);
   assert.equal(config.lanes[2].model_budget_ms, 900000, `${repository} Lane C model cap is fifteen minutes`);
@@ -179,8 +183,12 @@ const inputTokenRoom = {
   'gpt-6.1-sol': 1000000,
   'gpt-6.1-terra': 1050000,
   'gpt-6.2-sol': 1050000,
+  // MiniMax M3.1 Flash: a 1M-token context on Go and on Command Code (recorded 2026-11-18).
+  'minimax-m3.1-flash': 1000000,
+  'minimax/minimax-m3.1-flash': 1000000,
 };
-const sharesWindowWithOutput = new Set(['claude-haiku-5-5', 'claude-sonnet-5-5', 'gpt-6-luna', 'gpt-6.1-sol', 'gpt-6.1-terra', 'gpt-6.2-sol']);
+const sharesWindowWithOutput = new Set(['claude-haiku-5-5', 'claude-sonnet-5-5', 'gpt-6-luna', 'gpt-6.1-sol', 'gpt-6.1-terra', 'gpt-6.2-sol',
+  'minimax-m3.1-flash', 'minimax/minimax-m3.1-flash']);
 for (const repository of repositories) {
   const config = source.loadConfig(repository, actionPath);
   const policy = config.review_policy;

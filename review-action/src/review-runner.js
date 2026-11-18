@@ -8,9 +8,10 @@ const { createStatusPublisher } = require('./review-status.js');
 const { diffIdentity, changedSince, sinceReviewScope, encodeState, readState, collectReplies, trustedState, planLane,
   chooseIncremental, nextFindings, sinceLines, INCREMENTAL_SHARE_LIMIT } = require('./review-incremental.js');
 
-// Verified with final model output from the self-hosted CN runner. Keep unknown
-// models (including Muse) on the approved proxy; never retry across egress paths.
-const DIRECT_GO_MODELS = new Set(['kimi-k2.7-code', 'glm-5.3', 'hy3']);
+// Verified with final model output from the self-hosted CN runner (MiniMax M3.1 Flash: 60+ direct
+// requests from szlab, the review VMs' host, on 2026-11-18). Keep unknown models (including Muse)
+// on the approved proxy; never retry across egress paths.
+const DIRECT_GO_MODELS = new Set(['kimi-k2.7-code', 'glm-5.3', 'hy3', 'minimax-m3.1-flash']);
 
 // A spent plan quota as the SDK client reports it, checked again here: only a known window and
 // an exact UTC timestamp ever reach a comment, never provider text.

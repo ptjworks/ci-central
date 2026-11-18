@@ -1305,7 +1305,7 @@ var {
   sinceLines,
   INCREMENTAL_SHARE_LIMIT
 } = require_review_incremental();
-var DIRECT_GO_MODELS = /* @__PURE__ */ new Set(["kimi-k2.7-code", "glm-5.3", "hy3"]);
+var DIRECT_GO_MODELS = /* @__PURE__ */ new Set(["kimi-k2.7-code", "glm-5.3", "hy3", "minimax-m3.1-flash"]);
 var QUOTA_WINDOWS = { "5h": ["5-hour", "5 \u5C0F\u65F6"], weekly: ["weekly", "\u5468"], monthly: ["monthly", "\u6708"], daily: ["daily", "\u65E5"] };
 function reportedQuota(error) {
   if (error?.quotaExhausted !== true) return null;

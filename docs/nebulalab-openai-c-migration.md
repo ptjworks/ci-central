@@ -3,9 +3,9 @@
 NebulaLab's C runs on OpenAI first. Since 2026-11-03 the other six repositories also use
 provider bundles, for a last resort only (see the end of this page).
 
-| Lane | First pass | Regular review | Cross-provider route |
+| Lane | First pass | Regular review | Later routes |
 | --- | --- | --- | --- |
-| A | Muse Spark 1.3 Contributor on Go | Same | CC through C / command-code |
+| A | Muse Spark 1.3 Contributor (xhigh) on Go | Same | Command Code (C slot) |
 | B | Sonnet 5.5 on Anthropic | Haiku 5.5 on Anthropic | Haiku on Go (A), then Command Code (C) |
 | C | GPT-6.2 Sol on OpenAI, high reasoning | GPT-6.1 Terra on OpenAI, high reasoning | GPT-6 Luna high on Go (A), then Command Code (C) |
 
@@ -26,9 +26,9 @@ planned OpenAI allowance is shared with NebulaLab. Historical
 Terra/medium acceptance records under `docs/validation/nebulalab-openai-c/` remain
 unchanged and do not validate the upgraded model settings.
 
-The 2-of-3 quorum, deadlines, diff budgets, and Anthropic 2:1 account selection stay
-unchanged. Self-hosted OpenAI calls use the approved review proxy. Anthropic retains
-the dedicated Taiwan path. Neither fallback enters the target lane's model chain.
+The 2-of-3 quorum, deadlines and diff budgets stay unchanged; Anthropic keeps one
+account since 2026-11-05. Self-hosted OpenAI calls use the approved review proxy. Anthropic retains
+the dedicated Taiwan path. A later route borrows only another slot's key, never another lane's model.
 
 ## Fixed secret interface
 
@@ -45,14 +45,13 @@ versioned JSON. These examples contain placeholders, never real keys.
 {"schema_version":1,"providers":{"openai":"https://api.openai.com/v1","command-code":"<existing CC HTTPS base>"}}
 ```
 
-Both provider maps must exactly match `credential_providers`. Malformed or mismatched
+Both provider maps must exactly match the slot's `key_slots` entry. Malformed or mismatched
 bundles disable C and its cross routes without echoing input; A/B can still review. Every parsed nested key is masked before
-requests or diagnostics. A provider selects both its key and endpoint. Legacy multiline
-keys still mean separate accounts of one provider; bundles cannot use `key_weights`.
-NebulaLab B stays plain and weighted 2:1.
+requests or diagnostics. A provider selects both its key and endpoint. Multiline keys still
+mean separate accounts of one provider, used in order. NebulaLab B stays plain.
 
 Since 2026-11-10 NebulaLab's `openai` entry holds two accounts' keys, one per line (in JSON,
-one string joined by an escaped `\n`), and the lane sets `key_order: "sequential"`. Every PR
+one string joined by an escaped `\n`), used in order like every multi-key slot. Every PR
 starts on the first key, so one account's prompt cache serves all of them. The second key
 only takes a request the first could not serve for an account reason (quota spent, key
 refused, account rate limit), before the lane crosses to Luna. The runner keeps no state
@@ -81,44 +80,45 @@ the current bundle. Never put values in files or logs.
 ## Key rotation
 
 `scripts/set-lane-secret.ps1` writes one plain key. Before it asks for the key, it refuses
-every target whose lane has `credential_providers` (a bundle) or `key_weights` (one key per
-account), so since the 2026-11-03 last resort only Lane A is left to it. A key usually sits in
+every target whose `key_slots` entry names two providers (a bundle) or a paid API alone (one key
+per account), so since the 2026-11-03 last resort only Lane A is left to it. A key usually sits in
 more than one slot, and each of them has to change:
 
 | Key | Plain slots | Bundle entries |
 | --- | --- | --- |
 | OpenCode Go | Lane A, every repository (the script) | `opencode-go` in Lane B, every repository but NebulaLab |
-| Anthropic, two accounts | NebulaLab's Lane B, one key per line | `anthropic` in Lane B, every repository but NebulaLab |
+| Anthropic | NebulaLab's Lane B, one key per line per account | `anthropic` in Lane B, every repository but NebulaLab |
 | Command Code | none | `command-code` in Lane C, every repository |
 | OpenAI | none | `openai` in Lane C, every repository; NebulaLab's holds both accounts, in order |
 
 Rewrite a bundle whole, from the current 1Password values of both its providers, with a JSON
 serializer as in the examples in this document. A slot left on an old key gets 401 from that
-provider: the lane crosses to its other provider with no sign in the comment status, routes
-that cross into the slot lose their fallback, and a 401 is not a spent quota, so the last
-resort does not step in.
+provider: the lane moves to its next route with no sign in the comment status, other lanes
+that route through the slot lose that provider, and a 401 is not a spent quota, so the paid
+route does not step in.
 
 ## Validation boundary
 
 Contract tests cover legacy slots, provider pairing, fail-closed parsing, masking,
-first-pass persistence, one Luna fallback, and unchanged A/B routes. Actual-runner
+first-pass persistence, the Luna routes, and unchanged A/B routes; `test/route-table.test.mjs`
+pins every configured lane's route order. Actual-runner
 acceptance must use the production SDK and proxy and obtain real final output from
 both OpenAI models and CC. Injected failures prove routing, not a real provider outage.
 
 ## Other repositories' last resort (2026-11-03)
 
 License-Service, resume, Thesis, Docs, Plugins and ci-central keep Go and Command Code
-first. Only when a lane's own route and its `cross_provider` route both report a spent
-quota does `last_resort` send the review to a paid API in the lane's own slot:
+first. Only when both plan routes report a spent quota does the lane's last route
+(`"when": "plans_spent"`) send the review to a paid API in the lane's own slot:
 
 | Lane | Last resort |
 | --- | --- |
 | A | None |
-| B | Claude Haiku 5.5 on Anthropic, the two NebulaLab accounts split 2:1 |
+| B | Claude Haiku 5.5 on Anthropic, NebulaLab's account |
 | C | Sol high as a PR's first pass on a full round, otherwise Luna xhigh, on OpenAI |
 
 Both slots become bundles; A stays plain. Generate them with a JSON serializer, never by
-hand: the two Anthropic keys are one string joined by an escaped `\n`.
+hand: several Anthropic keys would be one string joined by an escaped `\n`.
 
 `PR_AGENT_LANE_B_KEY` / `PR_AGENT_LANE_B_API_BASE`:
 ```json

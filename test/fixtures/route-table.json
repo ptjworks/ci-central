@@ -26,12 +26,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
@@ -70,12 +70,15 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
-    "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
+    "banners": [
+     "> ℹ️ Lane C 的 `MiniMax M3.1 Flash` 在 `opencode-go` 上未产生可用审核（套餐用量上限已用完），本条 review 由同一模型经 `command-code`（Lane C 的固定 Secret 槽位）生成。"
+    ],
+    "footer": "Lane C: minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash (opencode-go unavailable)",
     "tried": null,
     "action": null
    }
@@ -114,12 +117,15 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
-    "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
+    "banners": [
+     "> ℹ️ Lane C 的 `MiniMax M3.1 Flash` 在 `opencode-go` 上未产生可用审核，本条 review 由同一模型经 `command-code`（Lane C 的固定 Secret 槽位）生成。"
+    ],
+    "footer": "Lane C: minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash (opencode-go unavailable)",
     "tried": null,
     "action": null
    }
@@ -152,15 +158,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
-    "banners": [
-     "> ℹ️ Lane C 的 `GPT-6 Luna` 在 `command-code` 上未产生可用审核（API 余额已用完），本条 review 由同一模型经 `opencode-go`（Lane A 的固定 Secret 槽位）生成。"
-    ],
-    "footer": "Lane C: gpt-6-luna via opencode-go gpt-6-luna (command-code unavailable)",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
+    "banners": [],
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
@@ -200,15 +203,15 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key",
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key",
      "openai gpt-6.1-sol oai-key-1"
     ],
     "status": "valid",
     "title": "## AI PR Review · Lane C · GPT-6.1 Sol · 首审",
     "banners": [
-     "> ℹ️ Lane C 的两家套餐额度都已用完（command-code API 余额已用完；opencode-go 套餐用量上限已用完），本条 review 由最后兜底 `GPT-6.1 Sol` 经 `openai`（Lane C 的固定 Secret 槽位）生成。",
-     "> ℹ️ 这是本 PR 的首次审核，由 `GPT-6.1 Sol` 完成；后续提交由 `GPT-6 Luna` 审核，本条首审会折叠保留在评论底部。"
+     "> ℹ️ Lane C 的两家套餐额度都已用完（opencode-go 套餐用量上限已用完；command-code API 余额已用完），本条 review 由最后兜底 `GPT-6.1 Sol` 经 `openai`（Lane C 的固定 Secret 槽位）生成。",
+     "> ℹ️ 这是本 PR 的首次审核，由 `GPT-6.1 Sol` 完成；后续提交由 `MiniMax M3.1 Flash` 审核，本条首审会折叠保留在评论底部。"
     ],
     "footer": "Lane C: gpt-6.1-sol (first pass) via openai (last resort: plan quotas spent)",
     "tried": null,
@@ -249,17 +252,17 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "diagnostic",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [
      "> ⛔ 额度用尽，不是限流：`opencode-go` 的套餐用量上限已用完（供应商未给出重置时间）。"
     ],
-    "footer": "Lane C: gpt-6-luna",
-    "tried": "gpt-6-luna -> HTTP 503 (1 attempt(s)); gpt-6-luna via opencode-go gpt-6-luna -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "footer": "Lane C: minimax-m3.1-flash",
+    "tried": "minimax-m3.1-flash -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash -> HTTP 503 (1 attempt(s))",
+    "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
    }
   }
  },
@@ -296,17 +299,17 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "diagnostic",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [
      "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）。"
     ],
-    "footer": "Lane C: gpt-6-luna",
-    "tried": "gpt-6-luna -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6-luna via opencode-go gpt-6-luna -> HTTP 503 (1 attempt(s))",
-    "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
+    "footer": "Lane C: minimax-m3.1-flash",
+    "tried": "minimax-m3.1-flash -> HTTP 503 (1 attempt(s)); minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
+    "action": "Action needed: the command-code plan quota is exhausted. Wait for its reset or replenish it; retrying another model on the same plan cannot recover the review."
    }
   }
  },
@@ -343,12 +346,15 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
-    "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
+    "banners": [
+     "> ℹ️ Lane C 的 `MiniMax M3.1 Flash` 在 `opencode-go` 上未产生可用审核，本条 review 由同一模型经 `command-code`（Lane C 的固定 Secret 槽位）生成。"
+    ],
+    "footer": "Lane C: minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash (opencode-go unavailable)",
     "tried": null,
     "action": null
    }
@@ -381,12 +387,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
@@ -419,12 +425,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
@@ -457,12 +463,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
@@ -502,18 +508,18 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key",
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key",
      "openai gpt-6.1-sol oai-key-1",
      "openai gpt-6-luna oai-key-1"
     ],
     "status": "diagnostic",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [
-     "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；`opencode-go` 的套餐用量上限已用完（供应商未给出重置时间）；`openai` 的套餐用量上限已用完（供应商未给出重置时间）。"
+     "> ⛔ 额度用尽，不是限流：`opencode-go` 的套餐用量上限已用完（供应商未给出重置时间）；`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；`openai` 的套餐用量上限已用完（供应商未给出重置时间）。"
     ],
-    "footer": "Lane C: gpt-6-luna",
-    "tried": "gpt-6-luna -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6-luna via opencode-go gpt-6-luna -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
+    "footer": "Lane C: minimax-m3.1-flash",
+    "tried": "minimax-m3.1-flash -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
     "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the openai plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
    }
   }
@@ -547,14 +553,14 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "diagnostic",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
-    "tried": "gpt-6-luna -> HTTP 503 (1 attempt(s)); gpt-6-luna via opencode-go gpt-6-luna -> HTTP 503 (1 attempt(s))",
+    "footer": "Lane C: minimax-m3.1-flash",
+    "tried": "minimax-m3.1-flash -> HTTP 503 (1 attempt(s)); minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash -> HTTP 503 (1 attempt(s))",
     "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
    }
   }
@@ -593,18 +599,18 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key",
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key",
      "openai gpt-6.1-sol oai-key-1",
      "openai gpt-6-luna oai-key-1"
     ],
     "status": "diagnostic",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [
-     "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；`opencode-go` 的套餐用量上限已用完（供应商未给出重置时间）；`openai` 的套餐用量上限已用完（供应商未给出重置时间）。"
+     "> ⛔ 额度用尽，不是限流：`opencode-go` 的套餐用量上限已用完（供应商未给出重置时间）；`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；`openai` 的套餐用量上限已用完（供应商未给出重置时间）。"
     ],
-    "footer": "Lane C: gpt-6-luna",
-    "tried": "gpt-6-luna -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6-luna via opencode-go gpt-6-luna -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
+    "footer": "Lane C: minimax-m3.1-flash",
+    "tried": "minimax-m3.1-flash -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
     "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the openai plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
    }
   }
@@ -636,12 +642,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
@@ -674,12 +680,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
@@ -718,12 +724,15 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
-    "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
+    "banners": [
+     "> ℹ️ Lane C 的 `MiniMax M3.1 Flash` 在 `opencode-go` 上未产生可用审核（套餐用量上限已用完），本条 review 由同一模型经 `command-code`（Lane C 的固定 Secret 槽位）生成。"
+    ],
+    "footer": "Lane C: minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash (opencode-go unavailable)",
     "tried": null,
     "action": null
    }
@@ -762,12 +771,15 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
-    "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
+    "banners": [
+     "> ℹ️ Lane C 的 `MiniMax M3.1 Flash` 在 `opencode-go` 上未产生可用审核，本条 review 由同一模型经 `command-code`（Lane C 的固定 Secret 槽位）生成。"
+    ],
+    "footer": "Lane C: minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash (opencode-go unavailable)",
     "tried": null,
     "action": null
    }
@@ -800,15 +812,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
-    "banners": [
-     "> ℹ️ Lane C 的 `GPT-6 Luna` 在 `command-code` 上未产生可用审核（API 余额已用完），本条 review 由同一模型经 `opencode-go`（Lane A 的固定 Secret 槽位）生成。"
-    ],
-    "footer": "Lane C: gpt-6-luna via opencode-go gpt-6-luna (command-code unavailable)",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
+    "banners": [],
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
@@ -848,15 +857,15 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key",
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key",
      "openai gpt-6.1-sol oai-key-1"
     ],
     "status": "valid",
     "title": "## AI PR Review · Lane C · GPT-6.1 Sol · 首审",
     "banners": [
-     "> ℹ️ Lane C 的两家套餐额度都已用完（command-code API 余额已用完；opencode-go 套餐用量上限已用完），本条 review 由最后兜底 `GPT-6.1 Sol` 经 `openai`（Lane C 的固定 Secret 槽位）生成。",
-     "> ℹ️ 这是本 PR 的首次审核，由 `GPT-6.1 Sol` 完成；后续提交由 `GPT-6 Luna` 审核，本条首审会折叠保留在评论底部。"
+     "> ℹ️ Lane C 的两家套餐额度都已用完（opencode-go 套餐用量上限已用完；command-code API 余额已用完），本条 review 由最后兜底 `GPT-6.1 Sol` 经 `openai`（Lane C 的固定 Secret 槽位）生成。",
+     "> ℹ️ 这是本 PR 的首次审核，由 `GPT-6.1 Sol` 完成；后续提交由 `MiniMax M3.1 Flash` 审核，本条首审会折叠保留在评论底部。"
     ],
     "footer": "Lane C: gpt-6.1-sol (first pass) via openai (last resort: plan quotas spent)",
     "tried": null,
@@ -897,17 +906,17 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "diagnostic",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [
      "> ⛔ 额度用尽，不是限流：`opencode-go` 的套餐用量上限已用完（供应商未给出重置时间）。"
     ],
-    "footer": "Lane C: gpt-6-luna",
-    "tried": "gpt-6-luna -> HTTP 503 (1 attempt(s)); gpt-6-luna via opencode-go gpt-6-luna -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "footer": "Lane C: minimax-m3.1-flash",
+    "tried": "minimax-m3.1-flash -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash -> HTTP 503 (1 attempt(s))",
+    "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
    }
   }
  },
@@ -944,17 +953,17 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "diagnostic",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [
      "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）。"
     ],
-    "footer": "Lane C: gpt-6-luna",
-    "tried": "gpt-6-luna -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6-luna via opencode-go gpt-6-luna -> HTTP 503 (1 attempt(s))",
-    "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
+    "footer": "Lane C: minimax-m3.1-flash",
+    "tried": "minimax-m3.1-flash -> HTTP 503 (1 attempt(s)); minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
+    "action": "Action needed: the command-code plan quota is exhausted. Wait for its reset or replenish it; retrying another model on the same plan cannot recover the review."
    }
   }
  },
@@ -991,12 +1000,15 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
-    "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
+    "banners": [
+     "> ℹ️ Lane C 的 `MiniMax M3.1 Flash` 在 `opencode-go` 上未产生可用审核，本条 review 由同一模型经 `command-code`（Lane C 的固定 Secret 槽位）生成。"
+    ],
+    "footer": "Lane C: minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash (opencode-go unavailable)",
     "tried": null,
     "action": null
    }
@@ -1029,12 +1041,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
@@ -1067,12 +1079,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
@@ -1105,12 +1117,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
@@ -1150,18 +1162,18 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key",
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key",
      "openai gpt-6.1-sol oai-key-1",
      "openai gpt-6-luna oai-key-1"
     ],
     "status": "diagnostic",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [
-     "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；`opencode-go` 的套餐用量上限已用完（供应商未给出重置时间）；`openai` 的套餐用量上限已用完（供应商未给出重置时间）。"
+     "> ⛔ 额度用尽，不是限流：`opencode-go` 的套餐用量上限已用完（供应商未给出重置时间）；`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；`openai` 的套餐用量上限已用完（供应商未给出重置时间）。"
     ],
-    "footer": "Lane C: gpt-6-luna",
-    "tried": "gpt-6-luna -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6-luna via opencode-go gpt-6-luna -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
+    "footer": "Lane C: minimax-m3.1-flash",
+    "tried": "minimax-m3.1-flash -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
     "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the openai plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
    }
   }
@@ -1195,14 +1207,14 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "diagnostic",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
-    "tried": "gpt-6-luna -> HTTP 503 (1 attempt(s)); gpt-6-luna via opencode-go gpt-6-luna -> HTTP 503 (1 attempt(s))",
+    "footer": "Lane C: minimax-m3.1-flash",
+    "tried": "minimax-m3.1-flash -> HTTP 503 (1 attempt(s)); minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash -> HTTP 503 (1 attempt(s))",
     "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
    }
   }
@@ -1241,18 +1253,18 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key",
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key",
      "openai gpt-6.1-sol oai-key-1",
      "openai gpt-6-luna oai-key-1"
     ],
     "status": "diagnostic",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [
-     "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；`opencode-go` 的套餐用量上限已用完（供应商未给出重置时间）；`openai` 的套餐用量上限已用完（供应商未给出重置时间）。"
+     "> ⛔ 额度用尽，不是限流：`opencode-go` 的套餐用量上限已用完（供应商未给出重置时间）；`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；`openai` 的套餐用量上限已用完（供应商未给出重置时间）。"
     ],
-    "footer": "Lane C: gpt-6-luna",
-    "tried": "gpt-6-luna -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6-luna via opencode-go gpt-6-luna -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
+    "footer": "Lane C: minimax-m3.1-flash",
+    "tried": "minimax-m3.1-flash -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
     "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the openai plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
    }
   }
@@ -1284,12 +1296,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
@@ -1322,12 +1334,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
@@ -1366,12 +1378,15 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
-    "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
+    "banners": [
+     "> ℹ️ Lane C 的 `MiniMax M3.1 Flash` 在 `opencode-go` 上未产生可用审核（套餐用量上限已用完），本条 review 由同一模型经 `command-code`（Lane C 的固定 Secret 槽位）生成。"
+    ],
+    "footer": "Lane C: minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash (opencode-go unavailable)",
     "tried": null,
     "action": null
    }
@@ -1410,12 +1425,15 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
-    "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
+    "banners": [
+     "> ℹ️ Lane C 的 `MiniMax M3.1 Flash` 在 `opencode-go` 上未产生可用审核，本条 review 由同一模型经 `command-code`（Lane C 的固定 Secret 槽位）生成。"
+    ],
+    "footer": "Lane C: minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash (opencode-go unavailable)",
     "tried": null,
     "action": null
    }
@@ -1448,15 +1466,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
-    "banners": [
-     "> ℹ️ Lane C 的 `GPT-6 Luna` 在 `command-code` 上未产生可用审核（API 余额已用完），本条 review 由同一模型经 `opencode-go`（Lane A 的固定 Secret 槽位）生成。"
-    ],
-    "footer": "Lane C: gpt-6-luna via opencode-go gpt-6-luna (command-code unavailable)",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
+    "banners": [],
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
@@ -1496,15 +1511,15 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key",
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key",
      "openai gpt-6.1-sol oai-key-1"
     ],
     "status": "valid",
     "title": "## AI PR Review · Lane C · GPT-6.1 Sol · 首审",
     "banners": [
-     "> ℹ️ Lane C 的两家套餐额度都已用完（command-code API 余额已用完；opencode-go 套餐用量上限已用完），本条 review 由最后兜底 `GPT-6.1 Sol` 经 `openai`（Lane C 的固定 Secret 槽位）生成。",
-     "> ℹ️ 这是本 PR 的首次审核，由 `GPT-6.1 Sol` 完成；后续提交由 `GPT-6 Luna` 审核，本条首审会折叠保留在评论底部。"
+     "> ℹ️ Lane C 的两家套餐额度都已用完（opencode-go 套餐用量上限已用完；command-code API 余额已用完），本条 review 由最后兜底 `GPT-6.1 Sol` 经 `openai`（Lane C 的固定 Secret 槽位）生成。",
+     "> ℹ️ 这是本 PR 的首次审核，由 `GPT-6.1 Sol` 完成；后续提交由 `MiniMax M3.1 Flash` 审核，本条首审会折叠保留在评论底部。"
     ],
     "footer": "Lane C: gpt-6.1-sol (first pass) via openai (last resort: plan quotas spent)",
     "tried": null,
@@ -1545,17 +1560,17 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "diagnostic",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [
      "> ⛔ 额度用尽，不是限流：`opencode-go` 的套餐用量上限已用完（供应商未给出重置时间）。"
     ],
-    "footer": "Lane C: gpt-6-luna",
-    "tried": "gpt-6-luna -> HTTP 503 (1 attempt(s)); gpt-6-luna via opencode-go gpt-6-luna -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "footer": "Lane C: minimax-m3.1-flash",
+    "tried": "minimax-m3.1-flash -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash -> HTTP 503 (1 attempt(s))",
+    "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
    }
   }
  },
@@ -1592,17 +1607,17 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "diagnostic",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [
      "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）。"
     ],
-    "footer": "Lane C: gpt-6-luna",
-    "tried": "gpt-6-luna -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6-luna via opencode-go gpt-6-luna -> HTTP 503 (1 attempt(s))",
-    "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
+    "footer": "Lane C: minimax-m3.1-flash",
+    "tried": "minimax-m3.1-flash -> HTTP 503 (1 attempt(s)); minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
+    "action": "Action needed: the command-code plan quota is exhausted. Wait for its reset or replenish it; retrying another model on the same plan cannot recover the review."
    }
   }
  },
@@ -1639,12 +1654,15 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
-    "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
+    "banners": [
+     "> ℹ️ Lane C 的 `MiniMax M3.1 Flash` 在 `opencode-go` 上未产生可用审核，本条 review 由同一模型经 `command-code`（Lane C 的固定 Secret 槽位）生成。"
+    ],
+    "footer": "Lane C: minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash (opencode-go unavailable)",
     "tried": null,
     "action": null
    }
@@ -1677,12 +1695,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
@@ -1715,12 +1733,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
@@ -1753,12 +1771,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
@@ -1798,18 +1816,18 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key",
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key",
      "openai gpt-6.1-sol oai-key-1",
      "openai gpt-6-luna oai-key-1"
     ],
     "status": "diagnostic",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [
-     "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；`opencode-go` 的套餐用量上限已用完（供应商未给出重置时间）；`openai` 的套餐用量上限已用完（供应商未给出重置时间）。"
+     "> ⛔ 额度用尽，不是限流：`opencode-go` 的套餐用量上限已用完（供应商未给出重置时间）；`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；`openai` 的套餐用量上限已用完（供应商未给出重置时间）。"
     ],
-    "footer": "Lane C: gpt-6-luna",
-    "tried": "gpt-6-luna -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6-luna via opencode-go gpt-6-luna -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
+    "footer": "Lane C: minimax-m3.1-flash",
+    "tried": "minimax-m3.1-flash -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
     "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the openai plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
    }
   }
@@ -1843,14 +1861,14 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "diagnostic",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
-    "tried": "gpt-6-luna -> HTTP 503 (1 attempt(s)); gpt-6-luna via opencode-go gpt-6-luna -> HTTP 503 (1 attempt(s))",
+    "footer": "Lane C: minimax-m3.1-flash",
+    "tried": "minimax-m3.1-flash -> HTTP 503 (1 attempt(s)); minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash -> HTTP 503 (1 attempt(s))",
     "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
    }
   }
@@ -1889,18 +1907,18 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key",
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key",
      "openai gpt-6.1-sol oai-key-1",
      "openai gpt-6-luna oai-key-1"
     ],
     "status": "diagnostic",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [
-     "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；`opencode-go` 的套餐用量上限已用完（供应商未给出重置时间）；`openai` 的套餐用量上限已用完（供应商未给出重置时间）。"
+     "> ⛔ 额度用尽，不是限流：`opencode-go` 的套餐用量上限已用完（供应商未给出重置时间）；`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；`openai` 的套餐用量上限已用完（供应商未给出重置时间）。"
     ],
-    "footer": "Lane C: gpt-6-luna",
-    "tried": "gpt-6-luna -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6-luna via opencode-go gpt-6-luna -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
+    "footer": "Lane C: minimax-m3.1-flash",
+    "tried": "minimax-m3.1-flash -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
     "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the openai plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
    }
   }
@@ -1932,12 +1950,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
@@ -2641,12 +2659,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
@@ -2685,12 +2703,15 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
-    "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
+    "banners": [
+     "> ℹ️ Lane C 的 `MiniMax M3.1 Flash` 在 `opencode-go` 上未产生可用审核（套餐用量上限已用完），本条 review 由同一模型经 `command-code`（Lane C 的固定 Secret 槽位）生成。"
+    ],
+    "footer": "Lane C: minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash (opencode-go unavailable)",
     "tried": null,
     "action": null
    }
@@ -2729,12 +2750,15 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
-    "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
+    "banners": [
+     "> ℹ️ Lane C 的 `MiniMax M3.1 Flash` 在 `opencode-go` 上未产生可用审核，本条 review 由同一模型经 `command-code`（Lane C 的固定 Secret 槽位）生成。"
+    ],
+    "footer": "Lane C: minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash (opencode-go unavailable)",
     "tried": null,
     "action": null
    }
@@ -2767,15 +2791,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
-    "banners": [
-     "> ℹ️ Lane C 的 `GPT-6 Luna` 在 `command-code` 上未产生可用审核（API 余额已用完），本条 review 由同一模型经 `opencode-go`（Lane A 的固定 Secret 槽位）生成。"
-    ],
-    "footer": "Lane C: gpt-6-luna via opencode-go gpt-6-luna (command-code unavailable)",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
+    "banners": [],
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
@@ -2815,15 +2836,15 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key",
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key",
      "openai gpt-6.1-sol oai-key-1"
     ],
     "status": "valid",
     "title": "## AI PR Review · Lane C · GPT-6.1 Sol · 首审",
     "banners": [
-     "> ℹ️ Lane C 的两家套餐额度都已用完（command-code API 余额已用完；opencode-go 套餐用量上限已用完），本条 review 由最后兜底 `GPT-6.1 Sol` 经 `openai`（Lane C 的固定 Secret 槽位）生成。",
-     "> ℹ️ 这是本 PR 的首次审核，由 `GPT-6.1 Sol` 完成；后续提交由 `GPT-6 Luna` 审核，本条首审会折叠保留在评论底部。"
+     "> ℹ️ Lane C 的两家套餐额度都已用完（opencode-go 套餐用量上限已用完；command-code API 余额已用完），本条 review 由最后兜底 `GPT-6.1 Sol` 经 `openai`（Lane C 的固定 Secret 槽位）生成。",
+     "> ℹ️ 这是本 PR 的首次审核，由 `GPT-6.1 Sol` 完成；后续提交由 `MiniMax M3.1 Flash` 审核，本条首审会折叠保留在评论底部。"
     ],
     "footer": "Lane C: gpt-6.1-sol (first pass) via openai (last resort: plan quotas spent)",
     "tried": null,
@@ -2864,17 +2885,17 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "diagnostic",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [
      "> ⛔ 额度用尽，不是限流：`opencode-go` 的套餐用量上限已用完（供应商未给出重置时间）。"
     ],
-    "footer": "Lane C: gpt-6-luna",
-    "tried": "gpt-6-luna -> HTTP 503 (1 attempt(s)); gpt-6-luna via opencode-go gpt-6-luna -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "footer": "Lane C: minimax-m3.1-flash",
+    "tried": "minimax-m3.1-flash -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash -> HTTP 503 (1 attempt(s))",
+    "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
    }
   }
  },
@@ -2911,17 +2932,17 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "diagnostic",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [
      "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）。"
     ],
-    "footer": "Lane C: gpt-6-luna",
-    "tried": "gpt-6-luna -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6-luna via opencode-go gpt-6-luna -> HTTP 503 (1 attempt(s))",
-    "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
+    "footer": "Lane C: minimax-m3.1-flash",
+    "tried": "minimax-m3.1-flash -> HTTP 503 (1 attempt(s)); minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
+    "action": "Action needed: the command-code plan quota is exhausted. Wait for its reset or replenish it; retrying another model on the same plan cannot recover the review."
    }
   }
  },
@@ -2958,12 +2979,15 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
-    "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
+    "banners": [
+     "> ℹ️ Lane C 的 `MiniMax M3.1 Flash` 在 `opencode-go` 上未产生可用审核，本条 review 由同一模型经 `command-code`（Lane C 的固定 Secret 槽位）生成。"
+    ],
+    "footer": "Lane C: minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash (opencode-go unavailable)",
     "tried": null,
     "action": null
    }
@@ -2996,12 +3020,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
@@ -3034,12 +3058,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
@@ -3072,12 +3096,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
@@ -3117,18 +3141,18 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key",
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key",
      "openai gpt-6.1-sol oai-key-1",
      "openai gpt-6-luna oai-key-1"
     ],
     "status": "diagnostic",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [
-     "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；`opencode-go` 的套餐用量上限已用完（供应商未给出重置时间）；`openai` 的套餐用量上限已用完（供应商未给出重置时间）。"
+     "> ⛔ 额度用尽，不是限流：`opencode-go` 的套餐用量上限已用完（供应商未给出重置时间）；`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；`openai` 的套餐用量上限已用完（供应商未给出重置时间）。"
     ],
-    "footer": "Lane C: gpt-6-luna",
-    "tried": "gpt-6-luna -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6-luna via opencode-go gpt-6-luna -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
+    "footer": "Lane C: minimax-m3.1-flash",
+    "tried": "minimax-m3.1-flash -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
     "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the openai plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
    }
   }
@@ -3162,14 +3186,14 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "diagnostic",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
-    "tried": "gpt-6-luna -> HTTP 503 (1 attempt(s)); gpt-6-luna via opencode-go gpt-6-luna -> HTTP 503 (1 attempt(s))",
+    "footer": "Lane C: minimax-m3.1-flash",
+    "tried": "minimax-m3.1-flash -> HTTP 503 (1 attempt(s)); minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash -> HTTP 503 (1 attempt(s))",
     "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
    }
   }
@@ -3208,18 +3232,18 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key",
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key",
      "openai gpt-6.1-sol oai-key-1",
      "openai gpt-6-luna oai-key-1"
     ],
     "status": "diagnostic",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [
-     "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；`opencode-go` 的套餐用量上限已用完（供应商未给出重置时间）；`openai` 的套餐用量上限已用完（供应商未给出重置时间）。"
+     "> ⛔ 额度用尽，不是限流：`opencode-go` 的套餐用量上限已用完（供应商未给出重置时间）；`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；`openai` 的套餐用量上限已用完（供应商未给出重置时间）。"
     ],
-    "footer": "Lane C: gpt-6-luna",
-    "tried": "gpt-6-luna -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6-luna via opencode-go gpt-6-luna -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
+    "footer": "Lane C: minimax-m3.1-flash",
+    "tried": "minimax-m3.1-flash -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
     "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the openai plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
    }
   }
@@ -3251,12 +3275,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
@@ -3289,12 +3313,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
@@ -3333,12 +3357,15 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
-    "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
+    "banners": [
+     "> ℹ️ Lane C 的 `MiniMax M3.1 Flash` 在 `opencode-go` 上未产生可用审核（套餐用量上限已用完），本条 review 由同一模型经 `command-code`（Lane C 的固定 Secret 槽位）生成。"
+    ],
+    "footer": "Lane C: minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash (opencode-go unavailable)",
     "tried": null,
     "action": null
    }
@@ -3377,12 +3404,15 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
-    "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
+    "banners": [
+     "> ℹ️ Lane C 的 `MiniMax M3.1 Flash` 在 `opencode-go` 上未产生可用审核，本条 review 由同一模型经 `command-code`（Lane C 的固定 Secret 槽位）生成。"
+    ],
+    "footer": "Lane C: minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash (opencode-go unavailable)",
     "tried": null,
     "action": null
    }
@@ -3415,15 +3445,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
-    "banners": [
-     "> ℹ️ Lane C 的 `GPT-6 Luna` 在 `command-code` 上未产生可用审核（API 余额已用完），本条 review 由同一模型经 `opencode-go`（Lane A 的固定 Secret 槽位）生成。"
-    ],
-    "footer": "Lane C: gpt-6-luna via opencode-go gpt-6-luna (command-code unavailable)",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
+    "banners": [],
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
@@ -3463,15 +3490,15 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key",
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key",
      "openai gpt-6.1-sol oai-key-1"
     ],
     "status": "valid",
     "title": "## AI PR Review · Lane C · GPT-6.1 Sol · 首审",
     "banners": [
-     "> ℹ️ Lane C 的两家套餐额度都已用完（command-code API 余额已用完；opencode-go 套餐用量上限已用完），本条 review 由最后兜底 `GPT-6.1 Sol` 经 `openai`（Lane C 的固定 Secret 槽位）生成。",
-     "> ℹ️ 这是本 PR 的首次审核，由 `GPT-6.1 Sol` 完成；后续提交由 `GPT-6 Luna` 审核，本条首审会折叠保留在评论底部。"
+     "> ℹ️ Lane C 的两家套餐额度都已用完（opencode-go 套餐用量上限已用完；command-code API 余额已用完），本条 review 由最后兜底 `GPT-6.1 Sol` 经 `openai`（Lane C 的固定 Secret 槽位）生成。",
+     "> ℹ️ 这是本 PR 的首次审核，由 `GPT-6.1 Sol` 完成；后续提交由 `MiniMax M3.1 Flash` 审核，本条首审会折叠保留在评论底部。"
     ],
     "footer": "Lane C: gpt-6.1-sol (first pass) via openai (last resort: plan quotas spent)",
     "tried": null,
@@ -3512,17 +3539,17 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "diagnostic",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [
      "> ⛔ 额度用尽，不是限流：`opencode-go` 的套餐用量上限已用完（供应商未给出重置时间）。"
     ],
-    "footer": "Lane C: gpt-6-luna",
-    "tried": "gpt-6-luna -> HTTP 503 (1 attempt(s)); gpt-6-luna via opencode-go gpt-6-luna -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "footer": "Lane C: minimax-m3.1-flash",
+    "tried": "minimax-m3.1-flash -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash -> HTTP 503 (1 attempt(s))",
+    "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
    }
   }
  },
@@ -3559,17 +3586,17 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "diagnostic",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [
      "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）。"
     ],
-    "footer": "Lane C: gpt-6-luna",
-    "tried": "gpt-6-luna -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6-luna via opencode-go gpt-6-luna -> HTTP 503 (1 attempt(s))",
-    "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
+    "footer": "Lane C: minimax-m3.1-flash",
+    "tried": "minimax-m3.1-flash -> HTTP 503 (1 attempt(s)); minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
+    "action": "Action needed: the command-code plan quota is exhausted. Wait for its reset or replenish it; retrying another model on the same plan cannot recover the review."
    }
   }
  },
@@ -3606,12 +3633,15 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
-    "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
+    "banners": [
+     "> ℹ️ Lane C 的 `MiniMax M3.1 Flash` 在 `opencode-go` 上未产生可用审核，本条 review 由同一模型经 `command-code`（Lane C 的固定 Secret 槽位）生成。"
+    ],
+    "footer": "Lane C: minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash (opencode-go unavailable)",
     "tried": null,
     "action": null
    }
@@ -3644,12 +3674,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
@@ -3682,12 +3712,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
@@ -3720,12 +3750,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
@@ -3765,18 +3795,18 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key",
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key",
      "openai gpt-6.1-sol oai-key-1",
      "openai gpt-6-luna oai-key-1"
     ],
     "status": "diagnostic",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [
-     "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；`opencode-go` 的套餐用量上限已用完（供应商未给出重置时间）；`openai` 的套餐用量上限已用完（供应商未给出重置时间）。"
+     "> ⛔ 额度用尽，不是限流：`opencode-go` 的套餐用量上限已用完（供应商未给出重置时间）；`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；`openai` 的套餐用量上限已用完（供应商未给出重置时间）。"
     ],
-    "footer": "Lane C: gpt-6-luna",
-    "tried": "gpt-6-luna -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6-luna via opencode-go gpt-6-luna -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
+    "footer": "Lane C: minimax-m3.1-flash",
+    "tried": "minimax-m3.1-flash -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
     "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the openai plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
    }
   }
@@ -3810,14 +3840,14 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "diagnostic",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
-    "tried": "gpt-6-luna -> HTTP 503 (1 attempt(s)); gpt-6-luna via opencode-go gpt-6-luna -> HTTP 503 (1 attempt(s))",
+    "footer": "Lane C: minimax-m3.1-flash",
+    "tried": "minimax-m3.1-flash -> HTTP 503 (1 attempt(s)); minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash -> HTTP 503 (1 attempt(s))",
     "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
    }
   }
@@ -3856,18 +3886,18 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key",
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key",
      "openai gpt-6.1-sol oai-key-1",
      "openai gpt-6-luna oai-key-1"
     ],
     "status": "diagnostic",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [
-     "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；`opencode-go` 的套餐用量上限已用完（供应商未给出重置时间）；`openai` 的套餐用量上限已用完（供应商未给出重置时间）。"
+     "> ⛔ 额度用尽，不是限流：`opencode-go` 的套餐用量上限已用完（供应商未给出重置时间）；`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；`openai` 的套餐用量上限已用完（供应商未给出重置时间）。"
     ],
-    "footer": "Lane C: gpt-6-luna",
-    "tried": "gpt-6-luna -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6-luna via opencode-go gpt-6-luna -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
+    "footer": "Lane C: minimax-m3.1-flash",
+    "tried": "minimax-m3.1-flash -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
     "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the openai plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
    }
   }
@@ -3899,12 +3929,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
@@ -3937,12 +3967,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
@@ -3981,12 +4011,15 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
-    "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
+    "banners": [
+     "> ℹ️ Lane C 的 `MiniMax M3.1 Flash` 在 `opencode-go` 上未产生可用审核（套餐用量上限已用完），本条 review 由同一模型经 `command-code`（Lane C 的固定 Secret 槽位）生成。"
+    ],
+    "footer": "Lane C: minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash (opencode-go unavailable)",
     "tried": null,
     "action": null
    }
@@ -4025,12 +4058,15 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
-    "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
+    "banners": [
+     "> ℹ️ Lane C 的 `MiniMax M3.1 Flash` 在 `opencode-go` 上未产生可用审核，本条 review 由同一模型经 `command-code`（Lane C 的固定 Secret 槽位）生成。"
+    ],
+    "footer": "Lane C: minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash (opencode-go unavailable)",
     "tried": null,
     "action": null
    }
@@ -4063,15 +4099,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
-    "banners": [
-     "> ℹ️ Lane C 的 `GPT-6 Luna` 在 `command-code` 上未产生可用审核（API 余额已用完），本条 review 由同一模型经 `opencode-go`（Lane A 的固定 Secret 槽位）生成。"
-    ],
-    "footer": "Lane C: gpt-6-luna via opencode-go gpt-6-luna (command-code unavailable)",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
+    "banners": [],
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
@@ -4111,15 +4144,15 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key",
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key",
      "openai gpt-6.1-sol oai-key-1"
     ],
     "status": "valid",
     "title": "## AI PR Review · Lane C · GPT-6.1 Sol · 首审",
     "banners": [
-     "> ℹ️ Lane C 的两家套餐额度都已用完（command-code API 余额已用完；opencode-go 套餐用量上限已用完），本条 review 由最后兜底 `GPT-6.1 Sol` 经 `openai`（Lane C 的固定 Secret 槽位）生成。",
-     "> ℹ️ 这是本 PR 的首次审核，由 `GPT-6.1 Sol` 完成；后续提交由 `GPT-6 Luna` 审核，本条首审会折叠保留在评论底部。"
+     "> ℹ️ Lane C 的两家套餐额度都已用完（opencode-go 套餐用量上限已用完；command-code API 余额已用完），本条 review 由最后兜底 `GPT-6.1 Sol` 经 `openai`（Lane C 的固定 Secret 槽位）生成。",
+     "> ℹ️ 这是本 PR 的首次审核，由 `GPT-6.1 Sol` 完成；后续提交由 `MiniMax M3.1 Flash` 审核，本条首审会折叠保留在评论底部。"
     ],
     "footer": "Lane C: gpt-6.1-sol (first pass) via openai (last resort: plan quotas spent)",
     "tried": null,
@@ -4160,17 +4193,17 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "diagnostic",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [
      "> ⛔ 额度用尽，不是限流：`opencode-go` 的套餐用量上限已用完（供应商未给出重置时间）。"
     ],
-    "footer": "Lane C: gpt-6-luna",
-    "tried": "gpt-6-luna -> HTTP 503 (1 attempt(s)); gpt-6-luna via opencode-go gpt-6-luna -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "footer": "Lane C: minimax-m3.1-flash",
+    "tried": "minimax-m3.1-flash -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash -> HTTP 503 (1 attempt(s))",
+    "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
    }
   }
  },
@@ -4207,17 +4240,17 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "diagnostic",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [
      "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）。"
     ],
-    "footer": "Lane C: gpt-6-luna",
-    "tried": "gpt-6-luna -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6-luna via opencode-go gpt-6-luna -> HTTP 503 (1 attempt(s))",
-    "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
+    "footer": "Lane C: minimax-m3.1-flash",
+    "tried": "minimax-m3.1-flash -> HTTP 503 (1 attempt(s)); minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
+    "action": "Action needed: the command-code plan quota is exhausted. Wait for its reset or replenish it; retrying another model on the same plan cannot recover the review."
    }
   }
  },
@@ -4254,12 +4287,15 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
-    "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
+    "banners": [
+     "> ℹ️ Lane C 的 `MiniMax M3.1 Flash` 在 `opencode-go` 上未产生可用审核，本条 review 由同一模型经 `command-code`（Lane C 的固定 Secret 槽位）生成。"
+    ],
+    "footer": "Lane C: minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash (opencode-go unavailable)",
     "tried": null,
     "action": null
    }
@@ -4292,12 +4328,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
@@ -4330,12 +4366,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
@@ -4368,12 +4404,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
@@ -4413,18 +4449,18 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key",
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key",
      "openai gpt-6.1-sol oai-key-1",
      "openai gpt-6-luna oai-key-1"
     ],
     "status": "diagnostic",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [
-     "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；`opencode-go` 的套餐用量上限已用完（供应商未给出重置时间）；`openai` 的套餐用量上限已用完（供应商未给出重置时间）。"
+     "> ⛔ 额度用尽，不是限流：`opencode-go` 的套餐用量上限已用完（供应商未给出重置时间）；`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；`openai` 的套餐用量上限已用完（供应商未给出重置时间）。"
     ],
-    "footer": "Lane C: gpt-6-luna",
-    "tried": "gpt-6-luna -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6-luna via opencode-go gpt-6-luna -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
+    "footer": "Lane C: minimax-m3.1-flash",
+    "tried": "minimax-m3.1-flash -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
     "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the openai plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
    }
   }
@@ -4458,14 +4494,14 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "diagnostic",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
-    "tried": "gpt-6-luna -> HTTP 503 (1 attempt(s)); gpt-6-luna via opencode-go gpt-6-luna -> HTTP 503 (1 attempt(s))",
+    "footer": "Lane C: minimax-m3.1-flash",
+    "tried": "minimax-m3.1-flash -> HTTP 503 (1 attempt(s)); minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash -> HTTP 503 (1 attempt(s))",
     "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
    }
   }
@@ -4504,18 +4540,18 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key",
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key",
      "openai gpt-6.1-sol oai-key-1",
      "openai gpt-6-luna oai-key-1"
     ],
     "status": "diagnostic",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [
-     "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；`opencode-go` 的套餐用量上限已用完（供应商未给出重置时间）；`openai` 的套餐用量上限已用完（供应商未给出重置时间）。"
+     "> ⛔ 额度用尽，不是限流：`opencode-go` 的套餐用量上限已用完（供应商未给出重置时间）；`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；`openai` 的套餐用量上限已用完（供应商未给出重置时间）。"
     ],
-    "footer": "Lane C: gpt-6-luna",
-    "tried": "gpt-6-luna -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6-luna via opencode-go gpt-6-luna -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
+    "footer": "Lane C: minimax-m3.1-flash",
+    "tried": "minimax-m3.1-flash -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
     "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the openai plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
    }
   }
@@ -4547,12 +4583,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
@@ -4585,12 +4621,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
@@ -4629,12 +4665,15 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
-    "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
+    "banners": [
+     "> ℹ️ Lane C 的 `MiniMax M3.1 Flash` 在 `opencode-go` 上未产生可用审核（套餐用量上限已用完），本条 review 由同一模型经 `command-code`（Lane C 的固定 Secret 槽位）生成。"
+    ],
+    "footer": "Lane C: minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash (opencode-go unavailable)",
     "tried": null,
     "action": null
    }
@@ -4673,12 +4712,15 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
-    "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
+    "banners": [
+     "> ℹ️ Lane C 的 `MiniMax M3.1 Flash` 在 `opencode-go` 上未产生可用审核，本条 review 由同一模型经 `command-code`（Lane C 的固定 Secret 槽位）生成。"
+    ],
+    "footer": "Lane C: minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash (opencode-go unavailable)",
     "tried": null,
     "action": null
    }
@@ -4711,15 +4753,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
-    "banners": [
-     "> ℹ️ Lane C 的 `GPT-6 Luna` 在 `command-code` 上未产生可用审核（API 余额已用完），本条 review 由同一模型经 `opencode-go`（Lane A 的固定 Secret 槽位）生成。"
-    ],
-    "footer": "Lane C: gpt-6-luna via opencode-go gpt-6-luna (command-code unavailable)",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
+    "banners": [],
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
@@ -4759,15 +4798,15 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key",
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key",
      "openai gpt-6.1-sol oai-key-1"
     ],
     "status": "valid",
     "title": "## AI PR Review · Lane C · GPT-6.1 Sol · 首审",
     "banners": [
-     "> ℹ️ Lane C 的两家套餐额度都已用完（command-code API 余额已用完；opencode-go 套餐用量上限已用完），本条 review 由最后兜底 `GPT-6.1 Sol` 经 `openai`（Lane C 的固定 Secret 槽位）生成。",
-     "> ℹ️ 这是本 PR 的首次审核，由 `GPT-6.1 Sol` 完成；后续提交由 `GPT-6 Luna` 审核，本条首审会折叠保留在评论底部。"
+     "> ℹ️ Lane C 的两家套餐额度都已用完（opencode-go 套餐用量上限已用完；command-code API 余额已用完），本条 review 由最后兜底 `GPT-6.1 Sol` 经 `openai`（Lane C 的固定 Secret 槽位）生成。",
+     "> ℹ️ 这是本 PR 的首次审核，由 `GPT-6.1 Sol` 完成；后续提交由 `MiniMax M3.1 Flash` 审核，本条首审会折叠保留在评论底部。"
     ],
     "footer": "Lane C: gpt-6.1-sol (first pass) via openai (last resort: plan quotas spent)",
     "tried": null,
@@ -4808,17 +4847,17 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "diagnostic",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [
      "> ⛔ 额度用尽，不是限流：`opencode-go` 的套餐用量上限已用完（供应商未给出重置时间）。"
     ],
-    "footer": "Lane C: gpt-6-luna",
-    "tried": "gpt-6-luna -> HTTP 503 (1 attempt(s)); gpt-6-luna via opencode-go gpt-6-luna -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "footer": "Lane C: minimax-m3.1-flash",
+    "tried": "minimax-m3.1-flash -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash -> HTTP 503 (1 attempt(s))",
+    "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
    }
   }
  },
@@ -4855,17 +4894,17 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "diagnostic",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [
      "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）。"
     ],
-    "footer": "Lane C: gpt-6-luna",
-    "tried": "gpt-6-luna -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6-luna via opencode-go gpt-6-luna -> HTTP 503 (1 attempt(s))",
-    "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
+    "footer": "Lane C: minimax-m3.1-flash",
+    "tried": "minimax-m3.1-flash -> HTTP 503 (1 attempt(s)); minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
+    "action": "Action needed: the command-code plan quota is exhausted. Wait for its reset or replenish it; retrying another model on the same plan cannot recover the review."
    }
   }
  },
@@ -4902,12 +4941,15 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
-    "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
+    "banners": [
+     "> ℹ️ Lane C 的 `MiniMax M3.1 Flash` 在 `opencode-go` 上未产生可用审核，本条 review 由同一模型经 `command-code`（Lane C 的固定 Secret 槽位）生成。"
+    ],
+    "footer": "Lane C: minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash (opencode-go unavailable)",
     "tried": null,
     "action": null
    }
@@ -4940,12 +4982,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
@@ -4978,12 +5020,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
@@ -5016,12 +5058,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
@@ -5061,18 +5103,18 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key",
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key",
      "openai gpt-6.1-sol oai-key-1",
      "openai gpt-6-luna oai-key-1"
     ],
     "status": "diagnostic",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [
-     "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；`opencode-go` 的套餐用量上限已用完（供应商未给出重置时间）；`openai` 的套餐用量上限已用完（供应商未给出重置时间）。"
+     "> ⛔ 额度用尽，不是限流：`opencode-go` 的套餐用量上限已用完（供应商未给出重置时间）；`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；`openai` 的套餐用量上限已用完（供应商未给出重置时间）。"
     ],
-    "footer": "Lane C: gpt-6-luna",
-    "tried": "gpt-6-luna -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6-luna via opencode-go gpt-6-luna -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
+    "footer": "Lane C: minimax-m3.1-flash",
+    "tried": "minimax-m3.1-flash -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
     "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the openai plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
    }
   }
@@ -5106,14 +5148,14 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "diagnostic",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
-    "tried": "gpt-6-luna -> HTTP 503 (1 attempt(s)); gpt-6-luna via opencode-go gpt-6-luna -> HTTP 503 (1 attempt(s))",
+    "footer": "Lane C: minimax-m3.1-flash",
+    "tried": "minimax-m3.1-flash -> HTTP 503 (1 attempt(s)); minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash -> HTTP 503 (1 attempt(s))",
     "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
    }
   }
@@ -5152,18 +5194,18 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key",
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key",
      "openai gpt-6.1-sol oai-key-1",
      "openai gpt-6-luna oai-key-1"
     ],
     "status": "diagnostic",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [
-     "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；`opencode-go` 的套餐用量上限已用完（供应商未给出重置时间）；`openai` 的套餐用量上限已用完（供应商未给出重置时间）。"
+     "> ⛔ 额度用尽，不是限流：`opencode-go` 的套餐用量上限已用完（供应商未给出重置时间）；`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；`openai` 的套餐用量上限已用完（供应商未给出重置时间）。"
     ],
-    "footer": "Lane C: gpt-6-luna",
-    "tried": "gpt-6-luna -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6-luna via opencode-go gpt-6-luna -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
+    "footer": "Lane C: minimax-m3.1-flash",
+    "tried": "minimax-m3.1-flash -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
     "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the openai plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
    }
   }
@@ -5195,12 +5237,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
@@ -5233,12 +5275,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
@@ -5277,12 +5319,15 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
-    "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
+    "banners": [
+     "> ℹ️ Lane C 的 `MiniMax M3.1 Flash` 在 `opencode-go` 上未产生可用审核（套餐用量上限已用完），本条 review 由同一模型经 `command-code`（Lane C 的固定 Secret 槽位）生成。"
+    ],
+    "footer": "Lane C: minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash (opencode-go unavailable)",
     "tried": null,
     "action": null
    }
@@ -5321,12 +5366,15 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
-    "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
+    "banners": [
+     "> ℹ️ Lane C 的 `MiniMax M3.1 Flash` 在 `opencode-go` 上未产生可用审核，本条 review 由同一模型经 `command-code`（Lane C 的固定 Secret 槽位）生成。"
+    ],
+    "footer": "Lane C: minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash (opencode-go unavailable)",
     "tried": null,
     "action": null
    }
@@ -5359,15 +5407,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
-    "banners": [
-     "> ℹ️ Lane C 的 `GPT-6 Luna` 在 `command-code` 上未产生可用审核（API 余额已用完），本条 review 由同一模型经 `opencode-go`（Lane A 的固定 Secret 槽位）生成。"
-    ],
-    "footer": "Lane C: gpt-6-luna via opencode-go gpt-6-luna (command-code unavailable)",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
+    "banners": [],
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
@@ -5407,15 +5452,15 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key",
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key",
      "openai gpt-6.1-sol oai-key-1"
     ],
     "status": "valid",
     "title": "## AI PR Review · Lane C · GPT-6.1 Sol · 首审",
     "banners": [
-     "> ℹ️ Lane C 的两家套餐额度都已用完（command-code API 余额已用完；opencode-go 套餐用量上限已用完），本条 review 由最后兜底 `GPT-6.1 Sol` 经 `openai`（Lane C 的固定 Secret 槽位）生成。",
-     "> ℹ️ 这是本 PR 的首次审核，由 `GPT-6.1 Sol` 完成；后续提交由 `GPT-6 Luna` 审核，本条首审会折叠保留在评论底部。"
+     "> ℹ️ Lane C 的两家套餐额度都已用完（opencode-go 套餐用量上限已用完；command-code API 余额已用完），本条 review 由最后兜底 `GPT-6.1 Sol` 经 `openai`（Lane C 的固定 Secret 槽位）生成。",
+     "> ℹ️ 这是本 PR 的首次审核，由 `GPT-6.1 Sol` 完成；后续提交由 `MiniMax M3.1 Flash` 审核，本条首审会折叠保留在评论底部。"
     ],
     "footer": "Lane C: gpt-6.1-sol (first pass) via openai (last resort: plan quotas spent)",
     "tried": null,
@@ -5456,17 +5501,17 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "diagnostic",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [
      "> ⛔ 额度用尽，不是限流：`opencode-go` 的套餐用量上限已用完（供应商未给出重置时间）。"
     ],
-    "footer": "Lane C: gpt-6-luna",
-    "tried": "gpt-6-luna -> HTTP 503 (1 attempt(s)); gpt-6-luna via opencode-go gpt-6-luna -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "footer": "Lane C: minimax-m3.1-flash",
+    "tried": "minimax-m3.1-flash -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash -> HTTP 503 (1 attempt(s))",
+    "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
    }
   }
  },
@@ -5503,17 +5548,17 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "diagnostic",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [
      "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）。"
     ],
-    "footer": "Lane C: gpt-6-luna",
-    "tried": "gpt-6-luna -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6-luna via opencode-go gpt-6-luna -> HTTP 503 (1 attempt(s))",
-    "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
+    "footer": "Lane C: minimax-m3.1-flash",
+    "tried": "minimax-m3.1-flash -> HTTP 503 (1 attempt(s)); minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
+    "action": "Action needed: the command-code plan quota is exhausted. Wait for its reset or replenish it; retrying another model on the same plan cannot recover the review."
    }
   }
  },
@@ -5550,12 +5595,15 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
-    "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
+    "banners": [
+     "> ℹ️ Lane C 的 `MiniMax M3.1 Flash` 在 `opencode-go` 上未产生可用审核，本条 review 由同一模型经 `command-code`（Lane C 的固定 Secret 槽位）生成。"
+    ],
+    "footer": "Lane C: minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash (opencode-go unavailable)",
     "tried": null,
     "action": null
    }
@@ -5588,12 +5636,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
@@ -5626,12 +5674,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
@@ -5664,12 +5712,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
@@ -5709,18 +5757,18 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key",
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key",
      "openai gpt-6.1-sol oai-key-1",
      "openai gpt-6-luna oai-key-1"
     ],
     "status": "diagnostic",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [
-     "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；`opencode-go` 的套餐用量上限已用完（供应商未给出重置时间）；`openai` 的套餐用量上限已用完（供应商未给出重置时间）。"
+     "> ⛔ 额度用尽，不是限流：`opencode-go` 的套餐用量上限已用完（供应商未给出重置时间）；`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；`openai` 的套餐用量上限已用完（供应商未给出重置时间）。"
     ],
-    "footer": "Lane C: gpt-6-luna",
-    "tried": "gpt-6-luna -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6-luna via opencode-go gpt-6-luna -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
+    "footer": "Lane C: minimax-m3.1-flash",
+    "tried": "minimax-m3.1-flash -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
     "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the openai plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
    }
   }
@@ -5754,14 +5802,14 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "diagnostic",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
-    "tried": "gpt-6-luna -> HTTP 503 (1 attempt(s)); gpt-6-luna via opencode-go gpt-6-luna -> HTTP 503 (1 attempt(s))",
+    "footer": "Lane C: minimax-m3.1-flash",
+    "tried": "minimax-m3.1-flash -> HTTP 503 (1 attempt(s)); minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash -> HTTP 503 (1 attempt(s))",
     "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
    }
   }
@@ -5800,18 +5848,18 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key",
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key",
      "openai gpt-6.1-sol oai-key-1",
      "openai gpt-6-luna oai-key-1"
     ],
     "status": "diagnostic",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [
-     "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；`opencode-go` 的套餐用量上限已用完（供应商未给出重置时间）；`openai` 的套餐用量上限已用完（供应商未给出重置时间）。"
+     "> ⛔ 额度用尽，不是限流：`opencode-go` 的套餐用量上限已用完（供应商未给出重置时间）；`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；`openai` 的套餐用量上限已用完（供应商未给出重置时间）。"
     ],
-    "footer": "Lane C: gpt-6-luna",
-    "tried": "gpt-6-luna -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6-luna via opencode-go gpt-6-luna -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
+    "footer": "Lane C: minimax-m3.1-flash",
+    "tried": "minimax-m3.1-flash -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
     "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the openai plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
    }
   }
@@ -5843,12 +5891,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
@@ -5881,12 +5929,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
@@ -5925,12 +5973,15 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
-    "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
+    "banners": [
+     "> ℹ️ Lane C 的 `MiniMax M3.1 Flash` 在 `opencode-go` 上未产生可用审核（套餐用量上限已用完），本条 review 由同一模型经 `command-code`（Lane C 的固定 Secret 槽位）生成。"
+    ],
+    "footer": "Lane C: minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash (opencode-go unavailable)",
     "tried": null,
     "action": null
    }
@@ -5969,12 +6020,15 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
-    "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
+    "banners": [
+     "> ℹ️ Lane C 的 `MiniMax M3.1 Flash` 在 `opencode-go` 上未产生可用审核，本条 review 由同一模型经 `command-code`（Lane C 的固定 Secret 槽位）生成。"
+    ],
+    "footer": "Lane C: minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash (opencode-go unavailable)",
     "tried": null,
     "action": null
    }
@@ -6007,15 +6061,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
-    "banners": [
-     "> ℹ️ Lane C 的 `GPT-6 Luna` 在 `command-code` 上未产生可用审核（API 余额已用完），本条 review 由同一模型经 `opencode-go`（Lane A 的固定 Secret 槽位）生成。"
-    ],
-    "footer": "Lane C: gpt-6-luna via opencode-go gpt-6-luna (command-code unavailable)",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
+    "banners": [],
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
@@ -6055,15 +6106,15 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key",
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key",
      "openai gpt-6.1-sol oai-key-1"
     ],
     "status": "valid",
     "title": "## AI PR Review · Lane C · GPT-6.1 Sol · 首审",
     "banners": [
-     "> ℹ️ Lane C 的两家套餐额度都已用完（command-code API 余额已用完；opencode-go 套餐用量上限已用完），本条 review 由最后兜底 `GPT-6.1 Sol` 经 `openai`（Lane C 的固定 Secret 槽位）生成。",
-     "> ℹ️ 这是本 PR 的首次审核，由 `GPT-6.1 Sol` 完成；后续提交由 `GPT-6 Luna` 审核，本条首审会折叠保留在评论底部。"
+     "> ℹ️ Lane C 的两家套餐额度都已用完（opencode-go 套餐用量上限已用完；command-code API 余额已用完），本条 review 由最后兜底 `GPT-6.1 Sol` 经 `openai`（Lane C 的固定 Secret 槽位）生成。",
+     "> ℹ️ 这是本 PR 的首次审核，由 `GPT-6.1 Sol` 完成；后续提交由 `MiniMax M3.1 Flash` 审核，本条首审会折叠保留在评论底部。"
     ],
     "footer": "Lane C: gpt-6.1-sol (first pass) via openai (last resort: plan quotas spent)",
     "tried": null,
@@ -6104,17 +6155,17 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "diagnostic",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [
      "> ⛔ 额度用尽，不是限流：`opencode-go` 的套餐用量上限已用完（供应商未给出重置时间）。"
     ],
-    "footer": "Lane C: gpt-6-luna",
-    "tried": "gpt-6-luna -> HTTP 503 (1 attempt(s)); gpt-6-luna via opencode-go gpt-6-luna -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "footer": "Lane C: minimax-m3.1-flash",
+    "tried": "minimax-m3.1-flash -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash -> HTTP 503 (1 attempt(s))",
+    "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
    }
   }
  },
@@ -6151,17 +6202,17 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "diagnostic",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [
      "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）。"
     ],
-    "footer": "Lane C: gpt-6-luna",
-    "tried": "gpt-6-luna -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6-luna via opencode-go gpt-6-luna -> HTTP 503 (1 attempt(s))",
-    "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
+    "footer": "Lane C: minimax-m3.1-flash",
+    "tried": "minimax-m3.1-flash -> HTTP 503 (1 attempt(s)); minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
+    "action": "Action needed: the command-code plan quota is exhausted. Wait for its reset or replenish it; retrying another model on the same plan cannot recover the review."
    }
   }
  },
@@ -6198,12 +6249,15 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
-    "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
+    "banners": [
+     "> ℹ️ Lane C 的 `MiniMax M3.1 Flash` 在 `opencode-go` 上未产生可用审核，本条 review 由同一模型经 `command-code`（Lane C 的固定 Secret 槽位）生成。"
+    ],
+    "footer": "Lane C: minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash (opencode-go unavailable)",
     "tried": null,
     "action": null
    }
@@ -6236,12 +6290,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
@@ -6274,12 +6328,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
@@ -6312,12 +6366,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
@@ -6357,18 +6411,18 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key",
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key",
      "openai gpt-6.1-sol oai-key-1",
      "openai gpt-6-luna oai-key-1"
     ],
     "status": "diagnostic",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [
-     "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；`opencode-go` 的套餐用量上限已用完（供应商未给出重置时间）；`openai` 的套餐用量上限已用完（供应商未给出重置时间）。"
+     "> ⛔ 额度用尽，不是限流：`opencode-go` 的套餐用量上限已用完（供应商未给出重置时间）；`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；`openai` 的套餐用量上限已用完（供应商未给出重置时间）。"
     ],
-    "footer": "Lane C: gpt-6-luna",
-    "tried": "gpt-6-luna -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6-luna via opencode-go gpt-6-luna -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
+    "footer": "Lane C: minimax-m3.1-flash",
+    "tried": "minimax-m3.1-flash -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
     "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the openai plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
    }
   }
@@ -6402,14 +6456,14 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key"
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key"
     ],
     "status": "diagnostic",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
-    "tried": "gpt-6-luna -> HTTP 503 (1 attempt(s)); gpt-6-luna via opencode-go gpt-6-luna -> HTTP 503 (1 attempt(s))",
+    "footer": "Lane C: minimax-m3.1-flash",
+    "tried": "minimax-m3.1-flash -> HTTP 503 (1 attempt(s)); minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash -> HTTP 503 (1 attempt(s))",
     "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
    }
   }
@@ -6448,18 +6502,18 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key",
-     "opencode-go gpt-6-luna go-key",
+     "opencode-go minimax-m3.1-flash go-key",
+     "command-code minimax/minimax-m3.1-flash cc-key",
      "openai gpt-6.1-sol oai-key-1",
      "openai gpt-6-luna oai-key-1"
     ],
     "status": "diagnostic",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [
-     "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；`opencode-go` 的套餐用量上限已用完（供应商未给出重置时间）；`openai` 的套餐用量上限已用完（供应商未给出重置时间）。"
+     "> ⛔ 额度用尽，不是限流：`opencode-go` 的套餐用量上限已用完（供应商未给出重置时间）；`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；`openai` 的套餐用量上限已用完（供应商未给出重置时间）。"
     ],
-    "footer": "Lane C: gpt-6-luna",
-    "tried": "gpt-6-luna -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6-luna via opencode-go gpt-6-luna -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
+    "footer": "Lane C: minimax-m3.1-flash",
+    "tried": "minimax-m3.1-flash -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); minimax-m3.1-flash via command-code minimax/minimax-m3.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
     "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the openai plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
    }
   }
@@ -6491,12 +6545,12 @@
    },
    "C": {
     "attempts": [
-     "command-code gpt-6-luna cc-key"
+     "opencode-go minimax-m3.1-flash go-key"
     ],
     "status": "valid",
-    "title": "## AI PR Review · Lane C · GPT-6 Luna",
+    "title": "## AI PR Review · Lane C · MiniMax M3.1 Flash",
     "banners": [],
-    "footer": "Lane C: gpt-6-luna",
+    "footer": "Lane C: minimax-m3.1-flash",
     "tried": null,
     "action": null
    }
