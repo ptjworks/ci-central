@@ -7,6 +7,7 @@ const labels = { running: '主模型运行中', complete: '已生成，证据格
   cross: '本供应商未产生可用审核，同模型经另一供应商运行中',
   cross_model: '本供应商未产生可用审核，另一供应商的兜底模型运行中',
   account: 'key 未能服务，同模型换同一 Secret 槽位的下一把 key 运行中',
+  slow_resend: '首次请求输出过慢已中止，同模型在同一供应商重发中',
   last_resort: '两家套餐额度都已用完，最后兜底运行中',
   quota: '供应商额度用尽，审核未生成',
   unchanged: '复用此前提交的有效证据，未请求模型', incremental: '增量审核运行中',

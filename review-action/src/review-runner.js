@@ -12,6 +12,8 @@ const { diffIdentity, changedSince, sinceReviewScope, encodeState, readState, co
 // requests from szlab, the review VMs' host, on 2026-11-18). Keep unknown models (including Muse)
 // on the approved proxy; never retry across egress paths.
 const DIRECT_GO_MODELS = new Set(['kimi-k2.7-code', 'glm-5.3', 'hy3', 'minimax-m3.1-flash']);
+// A slow stream is sent once more only when this much of its window is left; less cannot finish a review.
+const MIN_RESEND_WINDOW_MS = 60000;
 
 // A spent plan quota as the SDK client reports it, checked again here: only a known window and
 // an exact UTC timestamp ever reach a comment, never provider text.
@@ -646,8 +648,9 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
   }
 
   // One served request per model and route. No retry, backoff, optional-field repair, or
-  // redirect can silently send the same review again.
-  async function callModel(lane, model, { windowMs = modelWindowMs(lane, model), sessionSuffix = '', attempt = 1, route } = {}) {
+  // redirect can silently send the same review again. The one exception is the caller's: a first
+  // route with slow_resend stops a slow stream and sends it once more (see requestReview).
+  async function callModel(lane, model, { windowMs = modelWindowMs(lane, model), sessionSuffix = '', attempt = 1, route, slowStream } = {}) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), windowMs);
     const startedAt = Date.now();
@@ -659,6 +662,7 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
     let httpStatus;
     let retryAfterMs;
     let localDeadline = false;
+    let slowChars = null;
     let quota = null;
     try {
       const credentials = credentialsFor(route.credentialLane, route.provider);
@@ -728,6 +732,7 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
         payload: sdkPayload(lane, route.modelId === model.id ? model : { ...model, id: route.modelId }),
         signal: controller.signal,
         timeoutMs: windowMs,
+        ...(slowStream ? { slowStream } : {}),
         onProgress: (progress) => console.log(`[Lane ${lane.id}/${route.modelId}] sdk=${JSON.stringify(progress)}`),
       });
       responseText = await response.text();
@@ -740,8 +745,9 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
       const code = error?.cause?.code || error?.code;
       errorCode = typeof code === 'string' && /^[a-zA-Z0-9_.-]{1,80}$/.test(code) ? code : '';
       localDeadline = error?.name === 'AbortError';
+      slowChars = error?.code === 'REVIEW_SLOW_STREAM' && Number.isSafeInteger(error.charsPerSecond) ? error.charsPerSecond : null;
       requestError = localDeadline
-        ? 'Local review deadline reached before a complete final response; this is not proof of an upstream outage.'
+        ? `Local review deadline reached after ${Math.round(windowMs / 1000)} s before a complete final response; this is not proof of an upstream outage.`
         : (error?.message || String(error));
       unserved = error?.unserved === true;
       httpStatus = Number.isInteger(error?.status) ? error.status : error?.httpStatus;
@@ -764,7 +770,7 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
     }
     return { response, responseText, requestError, attempts: attempt, failureKind: usable ? '' : failure.kind,
       unserved: !usable && unserved, httpStatus: response?.status ?? httpStatus, retryAfterMs, localDeadline, elapsedMs, errorCode,
-      quota: usable ? null : quota };
+      quota: usable ? null : quota, windowMs, slowChars: usable ? null : slowChars };
   }
 
   // A later route of the lane: the same model on another provider, through the slot that holds
@@ -861,7 +867,9 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
   // an account reason, once more to each later key (separate accounts, so not a retry of the same
   // route). When that yields no usable review, for any reason, the same request goes once to each
   // later route. A last route marked plans_spent is a paid API, asked only when every route before
-  // it reported a spent plan quota.
+  // it reported a spent plan quota. A first route with slow_resend (Go only) stops a stream whose
+  // output over its first after_ms is below min_chars_per_second and sends the same request once
+  // more to that route, on the same key, with the rest of the window and no second check.
   async function requestReview(lane) {
     const model = lane.model;
     const firstPass = lane.first_pass && !priorFirstPass(lane) ? lane.first_pass : null;
@@ -920,6 +928,25 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
     // plan route before it is spent.
     const quotaProviders = new Set();
     let finalStage = null;
+    // One resend per lane and run after a slow first stream, whatever model it was serving.
+    let slowResendsLeft = first.slow_resend ? 1 : 0;
+    // Why each route could not serve, in order, for the status table: the last route's reason
+    // alone hides the first, and the first is usually the one worth fixing.
+    const routeNotes = [];
+    function noteRoute(provider, outcome, quota, resend) {
+      const seconds = (ms) => Math.round(ms / 1000);
+      const note = quota ?? (lastFailureKind === 'report-invalid' ? { key: `${provider}:contract`, text: `${provider} 的报告未通过证据校验` }
+        : lastOutcome ? { key: `${provider}:incomplete`, text: `${provider} 的输出不完整` }
+          : lastClosedStream ? { key: `${provider}:closed`, text: `${provider} 的流在 ${lastClosedStream.seconds} 秒后被关闭` }
+            : outcome.localDeadline ? { key: `${provider}:deadline`, text: resend
+              ? `${provider} 输出过慢，重发一次后仍未在 ${seconds(resend.spentMs + outcome.windowMs)} 秒内写完`
+              : `${provider} 未在 ${seconds(outcome.windowMs)} 秒内写完` }
+              : outcome.slowChars !== null ? { key: `${provider}:slow`, text: `${provider} 输出过慢，剩余时间不够重发` }
+                : outcome.failureKind === 'authentication-failed' ? { key: `${provider}:auth`, text: `${provider} 的 key 被拒绝` }
+                  : outcome.failureKind === 'endpoint-unavailable' ? { key: `${provider}:endpoint`, text: `${provider} 连接失败` }
+                    : { key: `${provider}:http`, text: `${provider} HTTP ${outcome.httpStatus ?? '请求失败'}` });
+      if (!routeNotes.some((existing) => existing.key === note.key)) routeNotes.push(note);
+    }
     // One model on one stage: the stage provider's first key this lane has not seen fail, each later
     // key of that slot after an account failure, then, for the lane's model on its first route, the
     // later routes.
@@ -935,7 +962,7 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
       // The first route on its first unspent key, then each other key after an account failure, then the later routes.
       const steps = stage.available ? [{ key: stage.startKey() }] : crosses ? later.map((route) => ({ cross: route })) : [];
       const keysTried = new Set();
-      for (const { cross, key, from } of steps) {
+      for (const { cross, key, from, resend } of steps) {
         const via = cross ? laterRoute(lane, model, cross) : null;
         if (cross && !via) continue;
         if (via) {
@@ -948,7 +975,11 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
         const servedVia = via ?? (stage.lastResort ? { ...route, lastResort: true } : null);
         if (!via) keysTried.add(key);
         finalStage = stage;
-        const outcome = await callModel(lane, model, { route });
+        // The lane's first route may stop a stream that is too slow and send it once more (the
+        // owner's decision, 2026-11-19): on Go a request lands on a fast or a slow backend at random.
+        const checkSlow = !via && !stage.lastResort && !resend && slowResendsLeft > 0;
+        const outcome = await callModel(lane, model, { route, ...(resend ? { windowMs: resend.windowMs } : {}),
+          ...(checkSlow ? { slowStream: { afterMs: first.slow_resend.after_ms, minCharsPerSecond: first.slow_resend.min_chars_per_second } } : {}) });
         const attemptLabel = via ? `${model.id} via ${via.provider} ${via.modelId}`
           : stage.lastResort ? `${model.id} on ${route.provider} (last resort${servedKey ? `, key ${key + 1}/${stage.keyCount}` : ''})`
             : servedKey ? `${model.id} (key ${key + 1}/${stage.keyCount})` : model.id;
@@ -979,6 +1010,8 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
                 servedBy: model,
                 servedVia,
                 servedKey,
+                // The slow first stream this review replaced on the same provider.
+                slowResend: resend ? resend.slow : null,
                 // Why the lane's first route could not serve, when it was a spent plan.
                 ownQuota: via ? ownQuota : null,
                 // Why the paid route served: the spent plans before it.
@@ -1016,11 +1049,24 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
             console.log(`[Lane ${lane.id}/${route.modelId}] report rejected: ${error?.message?.startsWith('Review contract:') ? error.message : 'invalid report envelope'}`);
           }
         }
+        const slowText = outcome.slowChars !== null
+          ? `stream too slow (${outcome.slowChars} chars/s over the first ${Math.round(first.slow_resend.after_ms / 1000)} s), stopped after ${Math.round(outcome.elapsedMs / 1000)} s` : '';
+        const remainingMs = outcome.windowMs - outcome.elapsedMs;
+        if (checkSlow && outcome.slowChars !== null && remainingMs >= MIN_RESEND_WINDOW_MS) {
+          slowResendsLeft -= 1;
+          tried.push(`${attemptLabel} -> ${slowText} (${attempts ?? 0} attempt(s))`);
+          console.log(`[Lane ${lane.id}/${model.id}] ${route.provider} streamed ${outcome.slowChars} chars/s over the first ${Math.round(first.slow_resend.after_ms / 1000)} s, below ${first.slow_resend.min_chars_per_second}; sending the same request once more to ${route.provider} with the remaining ${Math.round(remainingMs / 1000)} s.`);
+          await statusPublisher.update(lane.id, 'slow_resend', `${model.id} @ ${route.provider}`);
+          steps.push({ key, resend: { windowMs: remainingMs, spentMs: outcome.elapsedMs, slow: { charsPerSecond: outcome.slowChars, provider: route.provider } } });
+          continue;
+        }
         if (!quotaNote) onlyQuota = false;
         const failed = lastClosedStream
           ? `HTTP ${lastClosedStream.httpStatus}, stream closed before the model finished after ${lastClosedStream.seconds} s`
-          : `HTTP ${response?.status ?? 'request failed'}${quotaNote ? `, ${quotaNote.tried}` : ''}`;
+          : outcome.localDeadline ? `local deadline reached after ${Math.round(outcome.windowMs / 1000)} s before the model finished${resend ? ' (resent after a slow stream)' : ''}`
+            : slowText || `HTTP ${response?.status ?? 'request failed'}${quotaNote ? `, ${quotaNote.tried}` : ''}`;
         tried.push(`${attemptLabel} -> ${lastFailureKind === 'report-invalid' ? `evidence contract rejected: ${lastReportError}` : lastOutcome || failed} (${attempts ?? 0} attempt(s))`);
+        noteRoute(route.provider, outcome, quotaNote && { key: quotaKey, text: quotaNote.status }, resend);
         if (cross) continue;
         if (stage.keyCount > 1 && accountFailure(outcome)) {
           // A rate limit passes; a spent credit or a refused key stays that way for this run.
@@ -1141,7 +1187,7 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
     ].join('\n');
 
     return { lane, servedBy: null, review, reasoningLength: 0, status: 'diagnostic',
-      quotaDetail: quotaNotes.map((note) => note.status).join('；'), onlyQuota: onlyQuota && quotaNotes.length > 0 };
+      routeDetail: routeNotes.map((note) => note.text).join('；'), onlyQuota: onlyQuota && quotaNotes.length > 0 };
   }
 
   // Context collection can take long enough for another push to land. Re-read the
@@ -1191,6 +1237,7 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
       ...(servedVia?.lastResort ? [`> ℹ️ Lane ${lane.id} 的两家套餐额度都已用完（${result.lastResortReason}），本条 review 由最后兜底 \`${servedBy.label}\` 经 \`${servedVia.provider}\`（Lane ${servedVia.credentialLane} 的固定 Secret 槽位）生成。`]
         : servedVia ? [`> ℹ️ Lane ${lane.id} 的 \`${servedBy.label}\` 在 \`${ownProvider(lane)}\` 上未产生可用审核${result.ownQuota ? `（${result.ownQuota.banner}）` : ''}，本条 review 由${crossLabel ? `兜底模型 \`${crossLabel}\` ` : '同一模型'}经 \`${servedVia.provider}\`（Lane ${servedVia.credentialLane} 的固定 Secret 槽位）生成。`] : []),
       ...(servedKey?.from ? [`> ℹ️ Lane ${lane.id} 的第 ${servedKey.from.index + 1} 把 key 未能服务（${servedKey.from.reason}），本条 review 由同一模型经同一 Secret 槽位的第 ${servedKey.index + 1} 把 key 生成。`] : []),
+      ...(result.slowResend ? [`> ℹ️ Lane ${lane.id} 第一次请求在 \`${result.slowResend.provider}\` 上输出过慢（${result.slowResend.charsPerSecond} 字符/秒），已中止；本条 review 来自同一模型在同一供应商上的一次重发。`] : []),
     ];
     if (isFirstPass) {
       banner.push(`> ℹ️ 这是本 PR 的首次审核，由 \`${servedBy.label}\` 完成；后续提交由 \`${laneModel.label}\` 审核，本条首审会折叠保留在评论底部。`);
@@ -1274,7 +1321,7 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
       posted++;
       if (status === 'valid') validLaneIds.add(lane.id);
       await statusPublisher.update(lane.id, status === 'valid' ? 'complete' : status === 'partial' ? 'partial' : result.onlyQuota ? 'quota' : 'failed',
-        servedLabel, status === 'diagnostic' ? result.quotaDetail || null
+        servedLabel, status === 'diagnostic' ? result.routeDetail || null
           : incremental ? `增量审核，自 ${incremental.state.head.slice(0, 7)}` : null);
       console.log(`${currentComment ? 'Updated' : 'Created'} AI PR Review comment ${publishedComment.id} for Lane ${lane.id} with status=${status}.`);
     } catch (error) {

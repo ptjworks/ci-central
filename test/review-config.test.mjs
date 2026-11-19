@@ -65,6 +65,10 @@ for (const repository of repositories) {
   // first pass and GPT-6 Luna at xhigh after. Their Lane C runs MiniMax M3.1 Flash on Go first
   // (2026-11-18), with Go's key from the Lane A slot. NebulaLab reviews on both APIs first; its
   // Lane C falls back to GPT-6 Luna, labelled, on Go and Command Code.
+  // On Go a MiniMax request lands on a fast or a slow backend at random: 136-178 tokens/s against
+  // 34-62 (2026-11-18 bench, 2026-11-19 production, two identical requests a second apart at 62 and
+  // 178). 350 chars/s (about 75 tokens/s at 4.2-4.7 chars a token) over the first minute separates
+  // them, and the owner chose one resend on Go for a slow stream (2026-11-19).
   assert.deepEqual(fromSource.lanes.map((lane) => lane.routes), onAnthropic ? [
     [{ provider: 'opencode-go' }, { provider: 'command-code', id: 'meta/muse-spark-1.3-contributor' }],
     [{ provider: 'anthropic' }, { provider: 'opencode-go' }, { provider: 'command-code' }],
@@ -73,7 +77,8 @@ for (const repository of repositories) {
   ] : [
     [{ provider: 'opencode-go' }, { provider: 'command-code', id: 'meta/muse-spark-1.3-contributor' }],
     [{ provider: 'opencode-go' }, { provider: 'command-code' }, { provider: 'anthropic', when: 'plans_spent' }],
-    [{ provider: 'opencode-go' }, { provider: 'command-code', id: 'minimax/minimax-m3.1-flash' }, { provider: 'openai', when: 'plans_spent', model: LUNA, first_pass: SOL }],
+    [{ provider: 'opencode-go', slow_resend: { after_ms: 60000, min_chars_per_second: 350 } },
+      { provider: 'command-code', id: 'minimax/minimax-m3.1-flash' }, { provider: 'openai', when: 'plans_spent', model: LUNA, first_pass: SOL }],
   ], `${repository} lane routes changed`);
   // Go serves GPT-6 Luna only over Responses (Chat Completions returns 400 ModelProtocolUnsupported)
   // and MiniMax M3.1 Flash only over Chat Completions; every route reuses the model's protocol.
@@ -133,12 +138,14 @@ for (const repository of repositories) {
   assert.equal(config.lanes[1].model.max_output_tokens, 120000, `${repository} Lane B must preserve the Haiku output ceiling`);
   assert.equal(config.lanes[1].request_timeout_ms, 1800000, `${repository} Lane B preserves reasoning with a thirty-minute request ceiling`);
   assert.equal(config.lanes[1].model_budget_ms, 1800000, `${repository} Lane B model budget matches its request ceiling`);
-  // Measured 2026-10-19: GPT-6 Luna finished three large NebulaLab PRs on Go in 68-107 s. On
-  // 2026-11-18 MiniMax M3.1 Flash took 166-609 s on four ci-central PRs. Lane C keeps fifteen
-  // minutes on each provider.
-  assert.equal(config.lanes[2].request_timeout_ms, 900000, `${repository} Lane C request budget changed without a measurement behind it`);
-  assert.equal(config.lanes[2].model_budget_ms, 900000, `${repository} Lane C model cap is fifteen minutes`);
-  assert.equal(config.lanes[2].model.request_timeout_ms, undefined, `${repository} Lane C's model inherits the lane's fifteen-minute window`);
+  // Measured 2026-10-19: GPT-6 Luna finished three large NebulaLab PRs on Go in 68-107 s. MiniMax
+  // M3.1 Flash on a fast Go backend finished every bench PR in at most 373 s (2026-11-18); on a slow
+  // one it ran past 900 s (resume-form-assistant-plugin #539, 2026-11-19), and the job waits for
+  // every lane. Outside NebulaLab, Lane C has ten minutes, as Lane A does, and a slow-stream resend
+  // only gets what is left of them. NebulaLab's Lane C keeps fifteen.
+  assert.equal(config.lanes[2].request_timeout_ms, anthropicLaneB.has(repository) ? 900000 : 600000, `${repository} Lane C request budget changed without a measurement behind it`);
+  assert.equal(config.lanes[2].model_budget_ms, anthropicLaneB.has(repository) ? 900000 : 600000, `${repository} Lane C model cap changed`);
+  assert.equal(config.lanes[2].model.request_timeout_ms, undefined, `${repository} Lane C's model inherits the lane's window`);
   // Measured 2026-10-14: Haiku finished 71-226K-token NebulaLab PRs in 146-211 s.
   assert.equal(config.lanes[1].model.request_timeout_ms, 900000, `${repository} Lane B Haiku uses a fifteen-minute window`);
   if (anthropicLaneB.has(repository)) {
@@ -275,6 +282,31 @@ for (const loader of [source, bundled]) {
     const config = structuredClone(nebula);
     mutate(config);
     assert.throws(() => loader.validateConfig(config, 'TshyGO/NebulaLab'), message);
+  }
+}
+
+// The slow-stream resend (2026-11-19) is the one resend on a lane's own provider: only a first route
+// on Go may set it, with exactly its two bounded integers.
+for (const loader of [source, bundled]) {
+  const live = source.loadConfig('ptjworks/resume-form-assistant-plugin', actionPath);
+  const valid = { after_ms: 60000, min_chars_per_second: 350 };
+  loader.validateConfig(structuredClone(live), 'ptjworks/resume-form-assistant-plugin');
+  for (const [mutate, message] of [
+    [(config) => { config.lanes[2].routes[1].slow_resend = valid; }, /routes\[1\] may only set provider, id, label/],
+    [(config) => { config.lanes[1].routes[2].slow_resend = valid; }, /routes\[2\] may only set provider, when, model, first_pass/],
+    [(config) => { config.lanes[2].routes[0].provider = 'command-code'; config.lanes[2].routes[1].provider = 'opencode-go'; delete config.lanes[2].routes[1].id; },
+      /routes\[0\]\.slow_resend is allowed only on an opencode-go first route/],
+    [(config) => { config.lanes[2].routes[0].slow_resend = { after_ms: 60000 }; }, /slow_resend must set exactly after_ms and min_chars_per_second/],
+    [(config) => { config.lanes[2].routes[0].slow_resend = { ...valid, retries: 2 }; }, /slow_resend must set exactly after_ms and min_chars_per_second/],
+    [(config) => { config.lanes[2].routes[0].slow_resend = [valid]; }, /slow_resend must set exactly after_ms and min_chars_per_second/],
+    [(config) => { config.lanes[2].routes[0].slow_resend = { ...valid, after_ms: 5000 }; }, /slow_resend\.after_ms must be an integer from 10000 to 300000/],
+    [(config) => { config.lanes[2].routes[0].slow_resend = { ...valid, after_ms: '60000' }; }, /slow_resend\.after_ms must be an integer from 10000 to 300000/],
+    [(config) => { config.lanes[2].routes[0].slow_resend = { ...valid, min_chars_per_second: 0 }; }, /slow_resend\.min_chars_per_second must be an integer from 1 to 100000/],
+    [(config) => { config.lanes[2].routes[0].slow_resend = { ...valid, min_chars_per_second: 350.5 }; }, /slow_resend\.min_chars_per_second must be an integer from 1 to 100000/],
+  ]) {
+    const config = structuredClone(live);
+    mutate(config);
+    assert.throws(() => loader.validateConfig(config, 'ptjworks/resume-form-assistant-plugin'), message);
   }
 }
 

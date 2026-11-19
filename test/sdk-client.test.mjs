@@ -37,11 +37,11 @@ async function fixture(t, implementation, route, requesterOptions = {}) {
     dispatcherOptions.push(options);
     return new Agent({ ...options, connect: { ca: certificate.cert } });
   }, usageTrailerGraceMs: 200, ...requesterOptions });
-  const invoke = async ({ timeoutMs = 2000, payload = basePayload, lane = 'B', protocol, sessionId, basePath = `/v1/${lane}`, onProgress = (entry) => logs.push(entry) } = {}) => {
+  const invoke = async ({ timeoutMs = 2000, payload = basePayload, lane = 'B', protocol, sessionId, basePath = `/v1/${lane}`, slowStream, onProgress = (entry) => logs.push(entry) } = {}) => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try { return await request({ apiKey: `test-only-${lane}`, baseURL: `https://127.0.0.1:${server.address().port}${basePath}`,
-      payload, timeoutMs, protocol, sessionId, signal: controller.signal, onProgress }); }
+      payload, timeoutMs, protocol, sessionId, signal: controller.signal, onProgress, ...(slowStream ? { slowStream } : {}) }); }
     finally { clearTimeout(timer); }
   };
   return { invoke, calls, logs, dispatcherOptions };
@@ -445,6 +445,74 @@ for (const [name, implementation] of [
       assert.ok(!JSON.stringify(f.logs).includes('PRIVATE'));
     });
   }
+
+  // The slow-stream check (2026-11-19): one look, afterMs after the first event, at text and thinking
+  // together. A stream below the floor is stopped as SlowStreamError, never as a deadline or an
+  // upstream error; a stream above it, or a caller without the check, runs as before.
+  const dripReasoning = (chunk, everyMs, finishAfter) => async (_req, res) => {
+    res.writeHead(200, { 'content-type': 'text/event-stream' });
+    for (let sent = 0; !res.destroyed && (finishAfter === undefined || sent < finishAfter); sent++) {
+      res.write(frame(delta('', null, { reasoning_content: chunk })));
+      await delay(everyMs);
+    }
+    if (!res.destroyed) res.end(frame(delta('final review', 'stop')));
+  };
+  test(`${name}: a stream below the slow-stream floor stops as SlowStreamError, not a deadline`, async (t) => {
+    const f = await fixture(t, implementation, dripReasoning('PRIVATE ', 100));
+    const started = Date.now();
+    await assert.rejects(f.invoke({ timeoutMs: 5000, slowStream: { afterMs: 400, minCharsPerSecond: 1000 } }), (error) => {
+      assert.equal(error.name, 'SlowStreamError');
+      assert.equal(error.code, 'REVIEW_SLOW_STREAM');
+      assert.equal(error.unserved, false);
+      assert.equal(error.httpStatus, 200);
+      assert.ok(Number.isSafeInteger(error.charsPerSecond) && error.charsPerSecond > 0 && error.charsPerSecond < 1000);
+      assert.match(error.message, /^Stream stopped as too slow: \d+ chars\/s over the first 0 s\.$/);
+      assert.ok(!error.message.includes('PRIVATE'));
+      return true;
+    });
+    assert.ok(Date.now() - started < 2500, 'the check, not the deadline, ended the request');
+    const finished = f.logs.at(-1);
+    assert.equal(finished.event, 'finished');
+    assert.equal(finished.error_code, 'SLOW_STREAM');
+    assert.equal(finished.slow_chars_per_second > 0, true);
+    assert.ok(!JSON.stringify(f.logs).includes('PRIVATE'));
+  });
+  test(`${name}: a stream above the slow-stream floor completes`, async (t) => {
+    const f = await fixture(t, implementation, dripReasoning('x'.repeat(2000), 100, 8));
+    const result = JSON.parse(await (await f.invoke({ timeoutMs: 5000, slowStream: { afterMs: 300, minCharsPerSecond: 1000 } })).text());
+    assert.equal(result.choices[0].finish_reason, 'stop');
+    assert.equal(result.choices[0].message.content, 'final review');
+    assert.equal(f.logs.at(-1).error_code, undefined);
+  });
+  test(`${name}: with the slow-stream check on, the caller's deadline still reads as a deadline`, async (t) => {
+    const f = await fixture(t, implementation, dripReasoning('PRIVATE ', 100));
+    await assert.rejects(f.invoke({ timeoutMs: 700, slowStream: { afterMs: 200, minCharsPerSecond: 1 } }), (error) => {
+      assert.equal(error.name, 'AbortError');
+      assert.equal(error.code, 'REVIEW_DEADLINE');
+      return true;
+    });
+  });
+  test(`${name}: Anthropic Messages thinking counts toward the slow-stream rate`, async (t) => {
+    const f = await fixture(t, implementation, async (_req, res) => {
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      const event = (type, data) => `event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`;
+      res.write(event('message_start', { message: { id: 'm', type: 'message', role: 'assistant', model: 'claude-test', content: [], usage: { input_tokens: 1, output_tokens: 0 } } }));
+      res.write(event('content_block_start', { index: 0, content_block: { type: 'thinking', thinking: '' } }));
+      while (!res.destroyed) {
+        res.write(event('content_block_delta', { index: 0, delta: { type: 'thinking_delta', thinking: 'PRIVATE ' } }));
+        await delay(100);
+      }
+    });
+    await assert.rejects(f.invoke({ protocol: 'anthropic-messages', basePath: '/B/v1', payload: anthropicPayload, timeoutMs: 5000, slowStream: { afterMs: 400, minCharsPerSecond: 1000 } }),
+      (error) => error.code === 'REVIEW_SLOW_STREAM' && error.charsPerSecond > 0 && !error.message.includes('PRIVATE'));
+  });
+  test(`${name}: an invalid slow-stream check is rejected before any request`, async (t) => {
+    const f = await fixture(t, implementation, dripReasoning('x', 10, 1));
+    for (const slowStream of [{ afterMs: 0, minCharsPerSecond: 1 }, { afterMs: 1000 }, { afterMs: 1000, minCharsPerSecond: 0.5 }]) {
+      await assert.rejects(f.invoke({ slowStream }), (error) => error.code === 'REVIEW_INVALID_SLOW_STREAM');
+    }
+    assert.equal(f.calls.length, 0);
+  });
 
   test(`${name}: [DONE] is recognized even when more than the tail window follows it`, async (t) => {
     const f = await fixture(t, implementation, async (_req, res) => {
