@@ -77,8 +77,8 @@ var require_index = __commonJS({
     }
     function validateModelOptions(config, lane, model, location) {
       const protocol = model.protocol ?? lane.protocol;
-      if (model.reasoning_effort !== void 0 && (protocol !== "openai-responses" || !["none", "low", "medium", "high", "xhigh", "max"].includes(model.reasoning_effort))) {
-        throw new Error(`${location}.reasoning_effort requires openai-responses and a supported effort.`);
+      if (model.reasoning_effort !== void 0 && (!["openai-responses", "openai-chat-completions"].includes(protocol) || !["none", "low", "medium", "high", "xhigh", "max"].includes(model.reasoning_effort))) {
+        throw new Error(`${location}.reasoning_effort requires openai-responses or openai-chat-completions and a supported effort.`);
       }
       if (model.omit_max_tokens && protocol !== "openai-chat-completions") {
         throw new Error(`${location}.omit_max_tokens is only supported by openai-chat-completions.`);
@@ -1322,7 +1322,7 @@ var {
   sinceLines,
   INCREMENTAL_SHARE_LIMIT
 } = require_review_incremental();
-var DIRECT_GO_MODELS = /* @__PURE__ */ new Set(["kimi-k2.7-code", "glm-5.3", "hy3", "minimax-m3.1-flash"]);
+var DIRECT_GO_MODELS = /* @__PURE__ */ new Set(["kimi-k2.7-code", "glm-5.3", "hy3", "minimax-m3.1-flash", "deepseek-v4.1-flash"]);
 var MIN_RESEND_WINDOW_MS = 6e4;
 var QUOTA_WINDOWS = { "5h": ["5-hour", "5 \u5C0F\u65F6"], weekly: ["weekly", "\u5468"], monthly: ["monthly", "\u6708"], daily: ["daily", "\u65E5"] };
 function reportedQuota(error) {
@@ -1867,7 +1867,8 @@ ${googleDeepReviewContract}`), model.review_lane_id, laneMode(model));
     if (protocol === "openai-responses") return responsesPayload(scoped);
     if (protocol === "anthropic-messages") return anthropicPayload(scoped);
     if (protocol === "google-generate-content") return { model: model.id, ...googlePayload(scoped) };
-    return basePayload(scoped);
+    const chat = basePayload(scoped);
+    return scoped.reasoning_effort ? { ...chat, reasoning_effort: scoped.reasoning_effort } : chat;
   }
   function classifyFailure(response, responseText, requestError, provider, quota) {
     const status = response?.status;

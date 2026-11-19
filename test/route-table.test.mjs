@@ -92,10 +92,10 @@ async function run(config, scenarioName, runnerEnv = { RUNNER_ENVIRONMENT: 'gith
     },
     paginate: async (which) => which === 'files' ? files : which === 'comments' ? comments : which === 'commits' ? [{ sha: headSha, commit: { message: 'test' } }] : [],
   };
-  const requestChatCompletion = async ({ apiKey, baseURL, payload, protocol, proxyUrl, sessionId }) => {
+  const requestChatCompletion = async ({ apiKey, baseURL, payload, protocol, proxyUrl, sessionId, slowStream }) => {
     const provider = providerOf(baseURL);
     const lane = Object.keys(focus).find((id) => systemOf(payload).includes(focus[id])) ?? '?';
-    requests.push({ lane, provider, protocol, proxyUrl, sessionId, payload });
+    requests.push({ lane, provider, protocol, proxyUrl, sessionId, slowStream, payload });
     attempts[lane].push(`${provider} ${payload.model} ${apiKey}`);
     const outcome = scenario.models?.[payload.model] ?? scenario.keys?.[apiKey] ?? scenario[provider] ?? 'ok';
     return outcomes[outcome](payload.model, provider);
@@ -154,20 +154,20 @@ if (process.argv.includes('--write')) {
   console.log(`${failures ? 'FAIL' : 'ok  '} route table: ${Object.keys(results).length - failures}/${Object.keys(results).length} cases unchanged`);
   if (failures) process.exitCode = 1;
 
-  // Lane C outside NebulaLab on a self-hosted runner (License-Service): MiniMax M3.1 Flash goes to Go
-  // first, directly (it is in the direct Go list, verified from szlab on 2026-11-18), as Chat
-  // Completions with its 131,072-token ceiling, no effort field (it thinks deepest without one) and
-  // the lane's Go session; then the same request goes to Command Code under its own id.
+  // Lane C outside NebulaLab on a self-hosted runner (License-Service): DeepSeek V4.1 Flash goes to Go
+  // first, directly (it is in the direct Go list, verified from szlab on 2026-11-19), as Chat
+  // Completions with its 196,608-token ceiling, `reasoning_effort: "high"` and the lane's Go session,
+  // with no slow-stream check; then the same request goes to Command Code under its own id.
   const license = JSON.parse(fs.readFileSync(path.join(configDir, 'TshyGO__NebulaGraph-License-Service.json'), 'utf8'));
   const { requests } = await run(license, 'go-down', { RUNNER_ENVIRONMENT: 'self-hosted', NEBULA_REVIEW_PROXY_URL: 'http://192.168.122.1:17890' });
   const laneC = requests.filter((request) => request.lane === 'C');
   const ok = laneC.length === 2
     && laneC[0].provider === 'opencode-go' && laneC[0].protocol === 'openai-chat-completions' && laneC[0].proxyUrl === undefined
-    && laneC[0].payload.model === 'minimax-m3.1-flash' && laneC[0].payload.max_tokens === 131072
-    && !('reasoning_effort' in laneC[0].payload) && !('reasoning' in laneC[0].payload)
+    && laneC[0].payload.model === 'deepseek-v4.1-flash' && laneC[0].payload.max_tokens === 196608
+    && laneC[0].payload.reasoning_effort === 'high' && !('reasoning' in laneC[0].payload) && laneC[0].slowStream === undefined
     && laneC[0].sessionId === 'TshyGO-NebulaGraph-License-Service-pr-42-lane-C'
-    && laneC[1].provider === 'command-code' && laneC[1].payload.model === 'minimax/minimax-m3.1-flash'
-    && laneC[1].payload.max_tokens === 131072 && laneC[1].sessionId === undefined;
-  console.log(`${ok ? 'ok  ' : 'FAIL'} self-hosted Lane C sends MiniMax M3.1 Flash to Go directly, then to Command Code`);
+    && laneC[1].provider === 'command-code' && laneC[1].payload.model === 'deepseek/deepseek-v4.1-flash'
+    && laneC[1].payload.max_tokens === 196608 && laneC[1].payload.reasoning_effort === 'high' && laneC[1].sessionId === undefined;
+  console.log(`${ok ? 'ok  ' : 'FAIL'} self-hosted Lane C sends DeepSeek V4.1 Flash at high effort to Go directly, then to Command Code`);
   if (!ok) { console.log(JSON.stringify(laneC.map(({ payload, ...rest }) => ({ ...rest, model: payload.model, max_tokens: payload.max_tokens })))); process.exitCode = 1; }
 }

@@ -2612,11 +2612,12 @@ check('last resort: an incremental round goes to Luna, not a Sol first pass', !r
   && isIncremental(incrementalResort) && incrementalResort.body.reasoning?.effort === 'xhigh'
   && !lastLaneComment(r, 'C').includes('ai-pr-review-first-pass:v1 lane=C'));
 
-// One resend on Go after a slow stream (the owner's decision, 2026-11-19). Outside NebulaLab, Lane C's
-// first route is MiniMax M3.1 Flash on Go with a slow-stream check; on Go a request lands on a fast or a
-// slow backend at random, so a stream below the floor over its first minute is stopped and the same
-// request goes once more to Go, with what is left of the lane's ten minutes and no second check.
-const liveMiniMaxConfig = JSON.parse(fs.readFileSync(path.join(here, '..', 'review-action', 'config', 'repositories', 'ptjworks__resume-form-assistant-plugin.json'), 'utf8'));
+// One resend on Go after a slow stream (the owner's decision, 2026-11-19). It was built for MiniMax M3.1
+// Flash: on Go a request lands on a fast or a slow backend at random, so a stream below the floor over its
+// first minute is stopped and the same request goes once more to Go, with what is left of the lane's ten
+// minutes and no second check. No live lane sets it since Lane C moved to DeepSeek V4.1 Flash
+// (2026-11-20); these checks run on a frozen copy of resume-form-assistant-plugin's MiniMax-era config.
+const liveMiniMaxConfig = JSON.parse(fs.readFileSync(path.join(here, 'fixtures', 'slow-resend-config.json'), 'utf8'));
 const slowEnv = { ...lastResortEnv, PR_REVIEW_CONFIG: JSON.stringify({ ...liveMiniMaxConfig, repository: 'TshyGO/NebulaLab' }) };
 const slowError = () => Object.assign(new Error('Stream stopped as too slow: 210 chars/s over the first 60 s.'),
   { name: 'SlowStreamError', code: 'REVIEW_SLOW_STREAM', charsPerSecond: 210, httpStatus: 200, unserved: false });

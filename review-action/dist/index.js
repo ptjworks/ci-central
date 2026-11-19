@@ -75,9 +75,10 @@ function keySlotFor(config, laneId, provider) {
 
 function validateModelOptions(config, lane, model, location) {
   const protocol = model.protocol ?? lane.protocol;
-  if (model.reasoning_effort !== undefined && (protocol !== 'openai-responses'
+  // Chat Completions takes the effort as a top-level `reasoning_effort` (DeepSeek V4.1 Flash on Go, 2026-11-20).
+  if (model.reasoning_effort !== undefined && (!['openai-responses', 'openai-chat-completions'].includes(protocol)
     || !['none', 'low', 'medium', 'high', 'xhigh', 'max'].includes(model.reasoning_effort))) {
-    throw new Error(`${location}.reasoning_effort requires openai-responses and a supported effort.`);
+    throw new Error(`${location}.reasoning_effort requires openai-responses or openai-chat-completions and a supported effort.`);
   }
   if (model.omit_max_tokens && protocol !== 'openai-chat-completions') {
     throw new Error(`${location}.omit_max_tokens is only supported by openai-chat-completions.`);

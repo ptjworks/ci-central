@@ -9,9 +9,9 @@ const { diffIdentity, changedSince, sinceReviewScope, encodeState, readState, co
   chooseIncremental, nextFindings, sinceLines, INCREMENTAL_SHARE_LIMIT } = require('./review-incremental.js');
 
 // Verified with final model output from the self-hosted CN runner (MiniMax M3.1 Flash: 60+ direct
-// requests from szlab, the review VMs' host, on 2026-11-18). Keep unknown models (including Muse)
-// on the approved proxy; never retry across egress paths.
-const DIRECT_GO_MODELS = new Set(['kimi-k2.7-code', 'glm-5.3', 'hy3', 'minimax-m3.1-flash']);
+// requests from szlab, the review VMs' host, on 2026-11-18; DeepSeek V4.1 Flash: 24 on 2026-11-19).
+// Keep unknown models (including Muse) on the approved proxy; never retry across egress paths.
+const DIRECT_GO_MODELS = new Set(['kimi-k2.7-code', 'glm-5.3', 'hy3', 'minimax-m3.1-flash', 'deepseek-v4.1-flash']);
 // A slow stream is sent once more only when this much of its window is left; less cannot finish a review.
 const MIN_RESEND_WINDOW_MS = 60000;
 
@@ -580,7 +580,8 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
     if (protocol === 'openai-responses') return responsesPayload(scoped);
     if (protocol === 'anthropic-messages') return anthropicPayload(scoped);
     if (protocol === 'google-generate-content') return { model: model.id, ...googlePayload(scoped) };
-    return basePayload(scoped);
+    const chat = basePayload(scoped);
+    return scoped.reasoning_effort ? { ...chat, reasoning_effort: scoped.reasoning_effort } : chat;
   }
 
   function classifyFailure(response, responseText, requestError, provider, quota) {
