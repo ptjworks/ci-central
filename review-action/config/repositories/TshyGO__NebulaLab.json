@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "repository": "TshyGO/NebulaLab",
   "review_policy": {
     "system_prompt": "You are an experienced code reviewer. First read the linked issue background when provided, then judge whether the pull request addresses it. Review correctness, security, maintainability, and CI or configuration risks. Supported platforms: the NebulaLab desktop application ships for Windows only; `src-tauri/tauri.conf.json` bundles `nsis` alone, there is no macOS or Linux desktop release, and no CI job compiles the Tauri shell off Windows. Desktop code that only builds or runs on macOS or Linux never reaches a release: `#[cfg(target_os = \"macos\")]`, `#[cfg(target_os = \"linux\")]`, `#[cfg(unix)]`, `#[cfg(not(windows))]` and other non-Windows `cfg` branches in the Tauri shell under `src-tauri/`, including vendored crates under `src-tauri/vendor/`, and branches of the desktop engine under `engine/` that only macOS takes (`sys.platform == \"darwin\"`). An issue that lives only in such a branch, security issues included, is a non-blocking note: put it in limitations, marked as non-blocking, never in findings, so it is never rated P0/P1/P2; do not ask to hold the merge on it or to change that branch to answer it, and do not list macOS-native or Linux-desktop validation of the desktop application as missing. This scope rule takes precedence over the reporting calibration and any other instruction to report every plausible defect as a finding. Report as usual a defect that also reaches the Windows build (build scripts and proc macros run on the Windows build host) or code shared by all platforms, anchored at the Windows path; a defect that would make a test or build on the CI runners fail, whichever branch it is in; and any non-Windows branch you cannot place in those desktop paths. The rule does not apply to a pull request that adds a macOS or Linux bundle target or starts running that desktop code in a service. Outside those branches the rule does not apply: the engine's `linux` branches and any engine branch Linux also takes (for example the POSIX side of `os.name == \"nt\"`), which the Python suite runs on the Linux build runners, `deploy/` (the data center, the test data center and winrunner), `supabase/`, other services on szlab and the public VPS, `.github/` workflows, CI and runner scripts, and shell scripts a member may run on a Mac (which must keep working on macOS's bash 3.2) are reviewed as usual even where they branch on Linux or macOS, and tests that run on the Linux build runners must still pass. Return concise Markdown in Chinese. Always reserve enough output budget for the final JSON report and never expose hidden reasoning. If there are no actionable issues, say so clearly and mention residual risks.",
@@ -12,36 +12,46 @@
     "issue_excerpt_chars": 20000,
     "description_char_limit": 20000
   },
+  "key_slots": {
+    "A": [
+      "opencode-go"
+    ],
+    "B": [
+      "anthropic"
+    ],
+    "C": [
+      "openai",
+      "command-code"
+    ]
+  },
   "lanes": [
     {
       "id": "A",
-      "provider": "opencode-go",
       "protocol": "openai-responses",
       "request_timeout_ms": 600000,
       "model_budget_ms": 600000,
-      "primary": {
+      "model": {
         "id": "muse-spark-1.3-contributor",
+        "reasoning_effort": "xhigh",
         "label": "Muse Spark 1.3 Contributor",
         "context_profile": "full",
         "max_output_tokens": 65536,
         "diff_char_budget": 1200000,
-        "reporting_calibration": true,
-        "cross_provider": {
-          "credential_lane": "C",
-          "id": "meta/muse-spark-1.3-contributor",
-          "credential_provider": "command-code"
-        }
+        "reporting_calibration": true
       },
-      "fallbacks": []
+      "routes": [
+        {
+          "provider": "opencode-go"
+        },
+        {
+          "provider": "command-code",
+          "id": "meta/muse-spark-1.3-contributor"
+        }
+      ]
     },
     {
       "id": "B",
-      "provider": "anthropic",
       "protocol": "anthropic-messages",
-      "key_weights": [
-        2,
-        1
-      ],
       "request_timeout_ms": 1800000,
       "model_budget_ms": 1800000,
       "first_pass": {
@@ -53,62 +63,33 @@
         "effort": "high",
         "diff_char_budget": 1200000
       },
-      "primary": {
+      "model": {
         "id": "claude-haiku-5-5",
         "label": "Claude Haiku 5.5",
         "request_timeout_ms": 900000,
         "context_profile": "full",
         "max_output_tokens": 120000,
         "effort": "high",
-        "diff_char_budget": 1200000,
-        "cross_provider": [
-          {
-            "credential_lane": "A",
-            "id": "claude-haiku-5-5"
-          },
-          {
-            "credential_lane": "C",
-            "id": "claude-haiku-5-5",
-            "credential_provider": "command-code"
-          }
-        ]
+        "diff_char_budget": 1200000
       },
-      "fallbacks": []
+      "routes": [
+        {
+          "provider": "anthropic"
+        },
+        {
+          "provider": "opencode-go"
+        },
+        {
+          "provider": "command-code"
+        }
+      ]
     },
     {
       "id": "C",
-      "provider": "openai",
-      "protocol": "openai-responses",
       "advisory": true,
-      "key_order": "sequential",
+      "protocol": "openai-responses",
       "request_timeout_ms": 900000,
       "model_budget_ms": 900000,
-      "primary": {
-        "id": "gpt-6.1-terra",
-        "label": "GPT-6.1 Terra",
-        "context_profile": "full",
-        "max_output_tokens": 65536,
-        "reporting_calibration": true,
-        "cross_provider": [
-          {
-            "credential_lane": "A",
-            "id": "gpt-6-luna",
-            "label": "GPT-6 Luna"
-          },
-          {
-            "credential_lane": "C",
-            "credential_provider": "command-code",
-            "id": "gpt-6-luna",
-            "label": "GPT-6 Luna"
-          }
-        ],
-        "reasoning_effort": "high"
-      },
-      "fallbacks": [],
-      "credential_providers": [
-        "openai",
-        "command-code"
-      ],
       "first_pass": {
         "id": "gpt-6.2-sol",
         "label": "GPT-6.2 Sol",
@@ -116,7 +97,30 @@
         "max_output_tokens": 65536,
         "reporting_calibration": true,
         "reasoning_effort": "high"
-      }
+      },
+      "model": {
+        "id": "gpt-6.1-terra",
+        "label": "GPT-6.1 Terra",
+        "context_profile": "full",
+        "max_output_tokens": 65536,
+        "reporting_calibration": true,
+        "reasoning_effort": "high"
+      },
+      "routes": [
+        {
+          "provider": "openai"
+        },
+        {
+          "provider": "opencode-go",
+          "id": "gpt-6-luna",
+          "label": "GPT-6 Luna"
+        },
+        {
+          "provider": "command-code",
+          "id": "gpt-6-luna",
+          "label": "GPT-6 Luna"
+        }
+      ]
     }
   ]
 }

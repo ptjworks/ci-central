@@ -1,8 +1,10 @@
 'use strict';
 
-// The six caller secrets stay fixed. A configured slot may contain a versioned,
-// provider-named bundle; plain slots retain their existing multi-account format.
-function readCredentials(lanes, env, maskSecret = () => {}) {
+// The six caller secrets stay fixed: a key and an API base per lane slot. A slot that holds two
+// providers carries a versioned, provider-named bundle; a slot with one provider is a plain value,
+// which may list several keys of that provider, one per line (separate accounts).
+// `keySlots` maps each slot id to its providers, as the repository config's key_slots does.
+function readCredentials(keySlots, env, maskSecret = () => {}) {
   const slots = new Map();
   const keysOf = (value) => String(value || '').split(/\r?\n/).map((key) => key.trim()).filter(Boolean);
   const credential = (key, base) => {
@@ -20,51 +22,51 @@ function readCredentials(lanes, env, maskSecret = () => {}) {
     }
     return value.providers;
   };
-  for (const lane of lanes) {
-    const key = env[`LANE_${lane.id}_KEY`] || '';
-    const base = env[`LANE_${lane.id}_API_BASE`] || '';
+  for (const [id, providers] of Object.entries(keySlots || {})) {
+    const key = env[`LANE_${id}_KEY`] || '';
+    const base = env[`LANE_${id}_API_BASE`] || '';
     const profiles = new Map();
     try {
-    if (lane.credential_providers) {
-      if (!key && !base) {
-        for (const provider of lane.credential_providers) profiles.set(provider, credential('', ''));
-      } else {
-        try {
-          const keys = envelope(key, lane.credential_providers);
-          for (const provider of lane.credential_providers) {
-            for (const value of keysOf(keys[provider])) maskSecret(value);
+      if (providers.length > 1) {
+        if (!key && !base) {
+          for (const provider of providers) profiles.set(provider, credential('', ''));
+        } else {
+          try {
+            const keys = envelope(key, providers);
+            for (const provider of providers) {
+              for (const value of keysOf(keys[provider])) maskSecret(value);
+            }
+            const bases = envelope(base, providers);
+            for (const provider of providers) {
+              const keysForProvider = keysOf(keys[provider]);
+              profiles.set(provider, { apiKey: keysForProvider[0], keys: keysForProvider, baseUrl: bases[provider].trim().replace(/\/$/, '') });
+            }
+            for (const { baseUrl } of profiles.values()) {
+              const url = new URL(baseUrl);
+              if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash) throw new Error('Invalid endpoint');
+            }
+          } catch {
+            // Never include JSON parser errors: they may quote the secret input.
+            throw new Error(`Lane ${id} requires matching version-1 provider credential bundles; no requests were sent.`);
           }
-          const bases = envelope(base, lane.credential_providers);
-          for (const provider of lane.credential_providers) {
-            const keysForProvider = keysOf(keys[provider]);
-            profiles.set(provider, { apiKey: keysForProvider[0], keys: keysForProvider, baseUrl: bases[provider].trim().replace(/\/$/, '') });
-          }
-          for (const { baseUrl } of profiles.values()) {
-            const url = new URL(baseUrl);
-            if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash) throw new Error('Invalid endpoint');
-          }
-        } catch {
-          // Never include JSON parser errors: they may quote the secret input.
-          throw new Error(`Lane ${lane.id} requires matching version-1 provider credential bundles; no requests were sent.`);
         }
+      } else {
+        if (key.trim().startsWith('{') || base.trim().startsWith('{')) {
+          throw new Error(`Lane ${id} does not configure provider credential bundles; no requests were sent.`);
+        }
+        profiles.set(providers[0], credential(key, base));
       }
-    } else {
-      if (key.trim().startsWith('{') || base.trim().startsWith('{')) {
-        throw new Error(`Lane ${lane.id} does not configure provider credential bundles; no requests were sent.`);
-      }
-      profiles.set(lane.provider, credential(key, base));
-    }
     } catch {
-      // A bad slot disables only that slot and its cross routes. Independent lanes
-      // may still meet the quorum; no profile may borrow a different provider's key.
+      // A bad slot stops the lane that owns it and skips other lanes' routes through it.
+      // Independent lanes may still meet the quorum; no profile may borrow a different provider's key.
       profiles.clear();
-      for (const provider of lane.credential_providers || [lane.provider]) {
+      for (const provider of providers) {
         profiles.set(provider, { apiKey: undefined, keys: [], baseUrl: '', invalid: true });
       }
     }
-    slots.set(lane.id, profiles);
+    slots.set(id, profiles);
   }
-  return (laneId, provider) => slots.get(laneId)?.get(provider);
+  return (slotId, provider) => slots.get(slotId)?.get(provider);
 }
 
 module.exports = { readCredentials };

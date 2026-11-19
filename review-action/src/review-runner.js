@@ -1,6 +1,6 @@
 'use strict';
 
-const { validateConfig } = require('./index.js');
+const { validateConfig, keySlotFor } = require('./index.js');
 const { readCredentials } = require('./review-credentials.js');
 const { packDiff, packIncremental, collectIssues, enrichWorkflows } = require('./review-context.js');
 const { PROMPT_VERSION, buildSystemPrompt, parseReview, renderReview, renderPartialReview } = require('./review-report.js');
@@ -8,9 +8,10 @@ const { createStatusPublisher } = require('./review-status.js');
 const { diffIdentity, changedSince, sinceReviewScope, encodeState, readState, collectReplies, trustedState, planLane,
   chooseIncremental, nextFindings, sinceLines, INCREMENTAL_SHARE_LIMIT } = require('./review-incremental.js');
 
-// Verified with final model output from the self-hosted CN runner. Keep unknown
-// models (including Muse) on the approved proxy; never retry across egress paths.
-const DIRECT_GO_MODELS = new Set(['kimi-k2.7-code', 'glm-5.3', 'hy3']);
+// Verified with final model output from the self-hosted CN runner (MiniMax M3.1 Flash: 60+ direct
+// requests from szlab, the review VMs' host, on 2026-11-18). Keep unknown models (including Muse)
+// on the approved proxy; never retry across egress paths.
+const DIRECT_GO_MODELS = new Set(['kimi-k2.7-code', 'glm-5.3', 'hy3', 'minimax-m3.1-flash']);
 
 // A spent plan quota as the SDK client reports it, checked again here: only a known window and
 // an exact UTC timestamp ever reach a comment, never provider text.
@@ -63,8 +64,11 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
   const reviewPolicy = reviewConfig.review_policy;
   // A fixed secret slot may hold several keys of its provider, one per line: separate accounts,
   // each with its own credit. GitHub masks every line of a multi-line secret on its own.
-  const credentialsFor = readCredentials(lanes, process.env, maskSecret);
-  const laneCredentials = Object.fromEntries(lanes.map((lane) => [lane.id, credentialsFor(lane.id, lane.provider)]));
+  const credentialsFor = readCredentials(reviewConfig.key_slots, process.env, maskSecret);
+  // A lane asks its routes' providers in order; each request uses the slot that holds that
+  // provider's keys, the lane's own slot first.
+  const slotOf = (lane, provider) => keySlotFor(reviewConfig, lane.id, provider);
+  const ownProvider = (lane) => lane.routes[0].provider;
   const { data: pull } = await github.rest.pulls.get({
     owner,
     repo,
@@ -131,7 +135,7 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
   const firstPassBegin = (laneId, head, modelId) => `<!-- ai-pr-review-first-pass:v1 lane=${laneId} head=${head} model=${modelId} -->`;
   const withoutFirstPassMarkers = (text) => String(text).replace(/<!-- \/?ai-pr-review-first-pass:v1[^>]*-->/g, '');
   function priorFirstPass(lane) {
-    if (!lane.first_pass && !lane.last_resort?.first_pass) return null;
+    if (!lane.first_pass && !lane.routes.some((route) => route.first_pass)) return null;
     const marker = `<!-- ai-pr-review-bot:lane-${lane.id} -->`;
     const comment = existingComments.filter((item) =>
       item.user?.login === 'github-actions[bot]' && item.body?.startsWith(marker + '\n')).at(-1);
@@ -444,14 +448,14 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
       const replies = collectReplies({ pull, since: state.at, comments: existingComments, reviews, reviewComments });
       const previousJson = JSON.stringify(previousForPrompt(state.findings));
       const repliesJson = JSON.stringify(replies.items);
-      const fullPack = fullContextFor(lane.primary).pack;
+      const fullPack = fullContextFor(lane.model).pack;
       // The size of the change since the review, not of the whole PR changes sent for those files.
       const sincePatchChars = since.changes ? since.sinceChars : 0;
       // A change that is most of the PR is decided before any file text is read.
       if (since.changes?.length && sincePatchChars <= INCREMENTAL_SHARE_LIMIT * fullPatchChars) await (since.texts ??= fetchTexts(since));
       // Every model the lane may ask must take the whole material: the change since the review and
       // the complete text of each changed file. Nothing is cut down; otherwise the lane reviews in full.
-      const sincePack = since.changes ? packIncremental(since.changes, Math.min(...[lane.primary, ...lane.fallbacks].map(budgetOf))) : null;
+      const sincePack = since.changes ? packIncremental(since.changes, budgetOf(lane.model)) : null;
       const missingText = since.changes ? since.changes.filter((change) => change.status !== 'removed'
         && typeof change.patch === 'string' && change.patch && typeof change.full_text !== 'string').length : 0;
       const decision = !since.changes ? { incremental: false, reason: since.reason }
@@ -559,7 +563,7 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
   const protocolOf = (lane, model) => model.protocol ?? lane.protocol;
   // Direct Google API lanes keep the original single generateContent request. Gemini
   // through Go streams via the SDK client, which also applies the lane's egress.
-  const legacyGoogle = (lane, model) => protocolOf(lane, model) === 'google-generate-content' && lane.provider !== 'opencode-go';
+  const legacyGoogle = (lane, model) => protocolOf(lane, model) === 'google-generate-content' && ownProvider(lane) !== 'opencode-go';
   // Go serves Gemini only under /inference/go/v1; the Lane secret names the /zen/go/v1 root.
   function goGoogleBase(baseUrl) {
     const url = new URL(baseUrl);
@@ -619,38 +623,10 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
     return Math.min(requestTimeoutMs, modelBudgetMs);
   }
 
-  // A slot's keys split PRs by number, in proportion to its lane's key_weights, so each PR stays
-  // on one account; or, with key_order "sequential", they are used in order. A key that failed for an account reason in this run is not started on again
-  // while another key of the slot has not.
-  // Own-provider state only: cross routes use pickedKey(provider) and the
-  // `if (crossing) continue` below prevents them from writing these sets.
-  const spentKeys = { A: new Set(), B: new Set(), C: new Set() };
-  // The spent keys whose credit or plan ran out, as opposed to a refused key.
-  const creditSpentKeys = { A: new Set(), B: new Set(), C: new Set() };
-  const weightsOf = (laneId, provider = lanes.find((lane) => lane.id === laneId)?.provider) => {
-    const lane = lanes.find((candidate) => candidate.id === laneId);
-    // A last resort in the lane's own slot splits its provider's keys by its own weights.
-    const configured = (lane?.last_resort?.provider === provider ? lane.last_resort.key_weights : lane?.key_weights) ?? [];
-    return credentialsFor(laneId, provider).keys.map((_, index) => configured[index] ?? 1);
-  };
-  // A lane with key_order "sequential" does not split: every PR starts on its own provider's first key.
-  const inOrder = (laneId, provider) => {
-    const lane = lanes.find((candidate) => candidate.id === laneId);
-    return lane?.key_order === 'sequential' && (provider ?? lane.provider) === lane.provider;
-  };
-  function pickedKey(laneId, provider) {
-    if (inOrder(laneId, provider)) return 0;
-    const weights = weightsOf(laneId, provider);
-    let rest = (Math.abs(Number(pullNumber)) || 0) % weights.reduce((sum, weight) => sum + weight, 0);
-    return Math.max(0, weights.findIndex((weight) => (rest -= weight) < 0));
-  }
-  function firstUnspent(picked, count, spent) {
-    for (let step = 0; step < count; step++) {
-      if (!spent.has((picked + step) % count)) return (picked + step) % count;
-    }
-    return picked;
-  }
-  const startKey = (laneId) => firstUnspent(pickedKey(laneId), laneCredentials[laneId].keys.length, spentKeys[laneId]);
+  // A slot may hold several keys of one provider, one per line: separate accounts, used in order.
+  // Every request starts on the first key the lane has not seen fail for an account reason in this
+  // run, and a later key only takes a request the one before it could not serve for such a reason.
+  const firstUnspent = (count, spent) => Array.from({ length: count }, (_, index) => index).find((index) => !spent.has(index)) ?? 0;
   // Credit gone, the key refused or the account rate-limited: another account may still serve.
   // A provider-side failure (5xx, overload, a broken stream, a timeout) would fail on every key.
   const accountFailure = (outcome) => outcome.failureKind === 'quota-exhausted'
@@ -658,16 +634,18 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
   const accountReason = (outcome, provider) => outcome.failureKind === 'quota-exhausted' ? quotaWording(provider, outcome.quota ?? {}).banner
     : outcome.failureKind === 'authentication-failed' ? 'key 被拒绝' : '账号限流';
 
-  // Where one request goes: the lane's own provider and fixed secret slot, or the model's
-  // cross-provider fallback (the configured model through its provider and slot), each with
-  // the slot key it uses.
-  const ownRoute = (lane, model, keyIndex = startKey(lane.id)) => ({ provider: lane.provider, credentialLane: lane.id, modelId: model.id, keyIndex });
+  // Where one request goes: a route's provider, the fixed secret slot that holds its keys, the
+  // model id on that provider, and the slot key it uses.
+  function routeTo(lane, model, route, keyIndex = 0) {
+    const credentialLane = slotOf(lane, route.provider);
+    const credentials = credentialLane && credentialsFor(credentialLane, route.provider);
+    if (!credentials?.apiKey || !credentials?.baseUrl) return null;
+    return { provider: route.provider, credentialLane, modelId: route.id ?? model.id, label: route.label, keyIndex };
+  }
 
   // One served request per model and route. No retry, backoff, optional-field repair, or
-  // redirect can silently send the same review again; the only resend is the opt-in
-  // unserved case in requestReview, where no model output was produced at all.
-  async function callModel(lane, model, { windowMs = modelWindowMs(lane, model), sessionSuffix = '', attempt = 1,
-    route = ownRoute(lane, model) } = {}) {
+  // redirect can silently send the same review again.
+  async function callModel(lane, model, { windowMs = modelWindowMs(lane, model), sessionSuffix = '', attempt = 1, route } = {}) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), windowMs);
     const startedAt = Date.now();
@@ -787,40 +765,18 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
       quota: usable ? null : quota };
   }
 
-  // A request that produced no model output at all (provider capacity 429/5xx, or a
-  // stream queued and closed before any token) is not a review attempt: resending it
-  // cannot duplicate a review or its reasoning cost. Opt-in per lane, at most once per
-  // model, inside that model's remaining window. Plan quota, credentials, endpoint
-  // reachability and the local deadline are never resent.
-  const UNSERVED_RESEND_DELAY_MS = 30000;
-  const UNSERVED_RESEND_MIN_WINDOW_MS = 60000;
-  function unservedResend(lane, model, outcome) {
-    if (lane.resend_unserved !== true || !outcome.unserved || outcome.localDeadline) return null;
-    if (['quota-exhausted', 'authentication-failed', 'gateway-blocked', 'endpoint-unavailable'].includes(outcome.failureKind)) return null;
-    const status = outcome.httpStatus;
-    if (!(status === 429 || status === 200 || (Number.isInteger(status) && status >= 500))) return null;
-    const delayMs = status === 200 ? 0 : Math.min(outcome.retryAfterMs ?? UNSERVED_RESEND_DELAY_MS, 120000);
-    const windowMs = modelWindowMs(lane, model) - outcome.elapsedMs - delayMs;
-    return windowMs >= UNSERVED_RESEND_MIN_WINDOW_MS ? { delayMs, windowMs } : null;
-  }
-
-  // A fallback on the same provider cannot help once that provider's quota is gone or the
-  // provider is down. So when a model's own request yields no usable review, for any reason,
-  // a model can try its configured cross-provider routes once each in order, through
-  // their fixed secret slots. The target lanes' own model chains are never entered.
-  function crossRoute(lane, model, cross) {
-    const target = lanes.find((candidate) => candidate.id === cross.credential_lane);
-    const provider = cross.credential_provider ?? target?.provider;
-    const credentials = credentialsFor(cross.credential_lane, provider);
-    if (!target || !credentials?.apiKey || !credentials?.baseUrl) {
-      console.log(`[Lane ${lane.id}/${model.id}] a cross-provider fallback is configured, but the Lane ${cross.credential_lane} secret slot is not provisioned.`);
+  // A later route of the lane: the same model on another provider, through the slot that holds
+  // that provider's keys, on its first key. Another lane's spent keys are never read: lanes run in
+  // parallel, so they would make the account depend on timing.
+  function laterRoute(lane, model, route) {
+    const via = routeTo(lane, model, route);
+    if (!via) {
+      console.log(`[Lane ${lane.id}/${model.id}] the ${route.provider} route is configured, but the Lane ${slotOf(lane, route.provider)} secret slot is not provisioned.`);
       return null;
     }
-    // The target slot's PR-number key, never one its own lane skipped to: lanes run in parallel, so
-    // that lane's spent keys would make the account depend on timing.
-    const sameModel = cross.id === model.id || cross.id.endsWith(`/${model.id}`);
-    const label = cross.label ?? (sameModel ? undefined : cross.id);
-    return { provider, credentialLane: target.id, modelId: cross.id, label, keyIndex: pickedKey(target.id, provider) };
+    // A label marks an explicitly different model, not a provider alias.
+    const sameModel = via.modelId === model.id || via.modelId.endsWith(`/${model.id}`);
+    return { ...via, label: route.label ?? (sameModel ? undefined : via.modelId) };
   }
 
   // A complete report is checked against exactly what was supplied, its findings get the ids the
@@ -898,44 +854,51 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
       reasoningUnit: reasoningLength ? 'chars' : null, complete, finishReason: normalizedFinishReason || 'missing' };
   }
 
-  // Each model once on the lane's own provider. When the slot holds several keys and one fails for
-  // an account reason, the same request goes once to each other key (separate accounts, so not a
-  // retry of the same route). When that yields no usable review, for any reason, a model with a
-  // cross_provider configuration tries its ordered routes, and only then does the lane move
-  // to its next model.
+  // A lane asks its routes in order. A first pass that is due goes to the first route only. The
+  // model goes to the first route, and when that route's slot holds several keys and one fails for
+  // an account reason, once more to each later key (separate accounts, so not a retry of the same
+  // route). When that yields no usable review, for any reason, the same request goes once to each
+  // later route. A last route marked plans_spent is a paid API, asked only when every route before
+  // it reported a spent plan quota.
   async function requestReview(lane) {
-    const primary = lane.primary;
+    const model = lane.model;
     const firstPass = lane.first_pass && !priorFirstPass(lane) ? lane.first_pass : null;
     if (firstPass) {
-      console.log(`[Lane ${lane.id}] this PR has no first-pass review yet; ${firstPass.id} leads, and later commits go to ${primary.id}.`);
+      console.log(`[Lane ${lane.id}] this PR has no first-pass review yet; ${firstPass.id} leads, and later commits go to ${model.id}.`);
     }
-    const chain = [...(firstPass ? [firstPass] : []), primary, ...lane.fallbacks];
-    const credentials = laneCredentials[lane.id];
-    if (!chain.some((model) => hasMaterial(contextFor(model, lane.id).pack))) {
-      return { lane, primary, servedBy: null, reasoningLength: 0, degraded: false, status: 'diagnostic',
+    const chain = [...(firstPass ? [firstPass] : []), model];
+    const [first, ...rest] = lane.routes;
+    const later = rest.filter((route) => !route.when);
+    const paid = rest.find((route) => route.when === 'plans_spent');
+    // Without its own slot the lane does not run, whichever slots its routes use. A broken own slot
+    // stops the lane too, even when an earlier route uses another slot: that slot also holds the
+    // lane's later and paid routes, so the lane says so at once instead of losing them unseen.
+    const credentials = credentialsFor(lane.id, reviewConfig.key_slots[lane.id][0]);
+    if (!chain.some((current) => hasMaterial(contextFor(current, lane.id).pack))) {
+      return { lane, servedBy: null, reasoningLength: 0, status: 'diagnostic',
         review: '> AI review was not generated.\n\nNo complete inspectable text patch was supplied. No model request was sent; binary, unavailable or omitted patches cannot establish review evidence.' };
     }
     if (!credentials?.apiKey || !credentials?.baseUrl) {
       console.log(`[Lane ${lane.id}] fixed credential slots are ${credentials?.invalid ? 'invalid' : 'not available'}; skipping model requests for this lane.`);
       return {
         lane,
-        primary,
         servedBy: null,
         reasoningLength: 0,
-        degraded: false,
         status: 'diagnostic',
         review: [
           '> AI review was not generated.',
           '',
-          credentials?.invalid ? `Lane ${lane.id} credential format is invalid; this slot and its cross routes are disabled.` : `Lane ${lane.id} is not provisioned.`,
+          credentials?.invalid ? `Lane ${lane.id} credential format is invalid; the lane does not run until its slot is fixed.` : `Lane ${lane.id} is not provisioned.`,
           '',
           `Action needed: set PR_AGENT_LANE_${lane.id}_KEY and PR_AGENT_LANE_${lane.id}_API_BASE in the caller repository.`,
         ].join('\n'),
       };
     }
-    const keyCount = credentials.keys.length;
+    const own = routeTo(lane, model, first);
+    if (!own) console.log(`[Lane ${lane.id}] the ${first.provider} route is configured, but the Lane ${slotOf(lane, first.provider)} secret slot is not provisioned.`);
+    const keyCount = own ? credentialsFor(own.credentialLane, first.provider).keys.length : 0;
     if (keyCount > 1) {
-      console.log(`[Lane ${lane.id}] the secret slot holds ${keyCount} keys, ${inOrder(lane.id) ? 'used in order' : `weights ${weightsOf(lane.id).join(':')}`}; PR #${pullNumber} starts on key ${pickedKey(lane.id) + 1}.`);
+      console.log(`[Lane ${lane.id}] the secret slot holds ${keyCount} keys, used in order; PR #${pullNumber} starts on the first one that has not failed.`);
     }
     const tried = [];
     let lastResponse;
@@ -944,19 +907,20 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
     let lastFailureKind = '';
     let lastReportError = '';
     let lastOutcome = '';
-    let lastProvider = lane.provider;
+    let lastProvider = first.provider;
     let lastClosedStream = null;
     let bestPartial = null;
     // Every route that failed on a spent plan, so the lane says so instead of "HTTP 429".
     const quotaNotes = [];
     let onlyQuota = true;
 
-    // Every provider whose route reported a spent quota: the last resort serves only when both the
-    // lane's own plan and its cross route's plan are spent.
+    // Every provider whose route reported a spent quota: the paid route serves only when every
+    // plan route before it is spent.
     const quotaProviders = new Set();
     let finalStage = null;
-    // One model on one stage: the stage provider's slot key for this PR, each other key of that slot
-    // after an account failure, then, on the lane's own stage only, the cross route.
+    // One model on one stage: the stage provider's first key this lane has not seen fail, each later
+    // key of that slot after an account failure, then, for the lane's model on its first route, the
+    // later routes.
     async function attemptModel(model, stage) {
       const supplied = contextFor(model, lane.id).pack;
       if (!supplied.coverage.some(file => file.patch_available && file.supplied_hunks)) {
@@ -965,14 +929,15 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
         return null;
       }
       let ownQuota = null;
-      // The own route on the PR's key, then each other key after an account failure, then the cross route.
-      const steps = [{ key: stage.startKey() }];
+      const crosses = stage.crosses && model === lane.model;
+      // The first route on its first unspent key, then each other key after an account failure, then the later routes.
+      const steps = stage.available ? [{ key: stage.startKey() }] : crosses ? later.map((route) => ({ cross: route })) : [];
       const keysTried = new Set();
       for (const { cross, key, from } of steps) {
-        const via = cross ? crossRoute(lane, model, cross) : null;
+        const via = cross ? laterRoute(lane, model, cross) : null;
         if (cross && !via) continue;
         if (via) {
-          console.log(`[Lane ${lane.id}/${model.id}] no usable review from ${lane.provider}; sending the same request once to ${via.modelId} on ${via.provider} through the Lane ${via.credentialLane} secret slot.`);
+          console.log(`[Lane ${lane.id}/${model.id}] no usable review from ${first.provider}; sending the same request once to ${via.modelId} on ${via.provider} through the Lane ${via.credentialLane} secret slot.`);
           await statusPublisher.update(lane.id, via.label ? 'cross_model' : 'cross', `${via.modelId} @ ${via.provider}`, ownQuota?.status);
         }
         if (from) await statusPublisher.update(lane.id, 'account', `${model.id} @ key ${key + 1}`);
@@ -981,14 +946,7 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
         const servedVia = via ?? (stage.lastResort ? { ...route, lastResort: true } : null);
         if (!via) keysTried.add(key);
         finalStage = stage;
-        let outcome = await callModel(lane, model, { route });
-        const resend = unservedResend(lane, model, outcome);
-        if (resend) {
-          console.log(`[Lane ${lane.id}/${route.modelId}] no model output was produced (HTTP ${outcome.httpStatus}); resending once with a fresh session after ${resend.delayMs} ms.`);
-          await statusPublisher.update(lane.id, 'resending', route.modelId);
-          await new Promise((resolve) => setTimeout(resolve, resend.delayMs));
-          outcome = await callModel(lane, model, { route, windowMs: resend.windowMs, sessionSuffix: '-resend', attempt: 2 });
-        }
+        const outcome = await callModel(lane, model, { route });
         const attemptLabel = via ? `${model.id} via ${via.provider} ${via.modelId}`
           : stage.lastResort ? `${model.id} on ${route.provider} (last resort${servedKey ? `, key ${key + 1}/${stage.keyCount}` : ''})`
             : servedKey ? `${model.id} (key ${key + 1}/${stage.keyCount})` : model.id;
@@ -1016,18 +974,16 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
             if (review && complete) {
               return {
                 lane,
-                primary,
                 servedBy: model,
                 servedVia,
                 servedKey,
-                // Why the lane's own provider could not serve, when it was a spent plan.
+                // Why the lane's first route could not serve, when it was a spent plan.
                 ownQuota: via ? ownQuota : null,
-                // Why the last resort served: the spent plans of both providers.
+                // Why the paid route served: the spent plans before it.
                 lastResortReason: stage.lastResort ? stage.reason : null,
                 review,
                 reasoningLength,
                 reasoningUnit,
-                degraded: stage.degraded(model),
                 firstPass: model === stage.firstPass,
                 record,
                 status: 'valid',
@@ -1039,7 +995,6 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
             if (review) {
               bestPartial ??= {
                 lane,
-                primary,
                 servedBy: model,
                 servedVia,
                 servedKey,
@@ -1047,7 +1002,6 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
                 review,
                 reasoningLength,
                 reasoningUnit,
-                degraded: stage.degraded(model),
                 status: 'partial',
               };
               console.log(`[Lane ${lane.id}/${route.modelId}] response was incomplete; trying the next route or model in the lane.`);
@@ -1074,63 +1028,56 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
             .find((index) => !keysTried.has(index) && !stage.spent.has(index));
           if (next !== undefined) {
             const reason = accountReason(outcome, route.provider);
-            console.log(`[Lane ${lane.id}/${model.id}] key ${key + 1} of ${stage.keyCount} could not serve (${outcome.failureKind || 'rate limited'}, HTTP ${outcome.httpStatus ?? 'none'}); sending the same request once with key ${next + 1} of the Lane ${lane.id} slot.`);
+            console.log(`[Lane ${lane.id}/${model.id}] key ${key + 1} of ${stage.keyCount} could not serve (${outcome.failureKind || 'rate limited'}, HTTP ${outcome.httpStatus ?? 'none'}); sending the same request once with key ${next + 1} of the Lane ${route.credentialLane} slot.`);
             steps.push({ key: next, from: { index: key, reason } });
             continue;
           }
         }
-        if (stage.crosses && model.cross_provider) {
-          steps.push(...[].concat(model.cross_provider).map((route) => ({ cross: route })));
-        }
+        if (crosses) steps.push(...later.map((later) => ({ cross: later })));
       }
       return null;
     }
 
+    const ownSpent = new Set();
     const ownStage = {
-      keyCount, crosses: true, lastResort: false, firstPass,
-      startKey: () => startKey(lane.id),
-      route: (model, key) => ownRoute(lane, model, key),
-      spent: spentKeys[lane.id],
-      creditSpent: creditSpentKeys[lane.id],
-      // The primary after a first pass that could not serve is the lane's normal path.
-      degraded: (model) => model !== primary && model !== firstPass,
+      keyCount, crosses: true, lastResort: false, firstPass, available: Boolean(own),
+      startKey: () => firstUnspent(keyCount, ownSpent),
+      route: (current, key) => ({ provider: own.provider, credentialLane: own.credentialLane, modelId: current.id, keyIndex: key }),
+      spent: ownSpent,
+      // The spent keys whose credit or plan ran out, as opposed to a refused key.
+      creditSpent: new Set(),
     };
-    for (const model of chain) {
-      // After a first pass that could not serve, the primary is the lane's normal path, not a fallback.
-      if (model !== chain[0]) await statusPublisher.update(lane.id, model === primary ? 'running' : 'fallback', model.id);
-      const served = await attemptModel(model, ownStage);
+    for (const current of chain) {
+      // After a first pass that could not serve, the model is the lane's normal path, not a fallback.
+      if (current !== chain[0]) await statusPublisher.update(lane.id, 'running', current.id);
+      const served = await attemptModel(current, ownStage);
       if (served) return served;
-      if (model !== chain[chain.length - 1]) {
-        console.log(`[Lane ${lane.id}/${primary.id}] falling back to the next model in the lane.`);
-      }
     }
 
-    // The last resort (the owner's decision, 2026-11-03): a paid API asked only when the lane's own
-    // plan and its cross route's plan both reported a spent quota and nothing else failed. A PR that
-    // has no first pass yet gets the last resort's first pass on a full review.
-    const last = lane.last_resort;
-    const cross = last && primary.cross_provider;
-    const crossProvider = cross && (cross.credential_provider ?? lanes.find((candidate) => candidate.id === cross.credential_lane)?.provider);
-    if (last && !bestPartial && onlyQuota && quotaProviders.has(lane.provider) && quotaProviders.has(crossProvider)) {
-      const lastCredentials = credentialsFor(lane.id, last.provider);
-      if (!lastCredentials?.apiKey || !lastCredentials?.baseUrl) {
-        console.log(`[Lane ${lane.id}] ${lane.provider} and ${crossProvider} both report a spent quota, but the Lane ${lane.id} slot holds no ${last.provider} credentials for the last resort.`);
+    // The paid route (the owner's decision, 2026-11-03): a paid API asked only when every plan
+    // route before it reported a spent quota and nothing else failed. A PR that has no first pass
+    // yet gets the paid route's first pass on a full review.
+    const plans = [first, ...later].map((route) => route.provider);
+    if (paid && !bestPartial && onlyQuota && plans.every((provider) => quotaProviders.has(provider))) {
+      const resort = routeTo(lane, model, paid);
+      if (!resort) {
+        console.log(`[Lane ${lane.id}] ${plans.join(' and ')} all report a spent quota, but the Lane ${slotOf(lane, paid.provider)} slot holds no ${paid.provider} credentials for the last resort.`);
       } else {
-        const lastFirst = last.first_pass && !priorFirstPass(lane) && !incrementalContexts.has(lane.id) ? last.first_pass : null;
+        const resortKeys = credentialsFor(resort.credentialLane, paid.provider).keys.length;
+        const lastFirst = paid.first_pass && !priorFirstPass(lane) && !incrementalContexts.has(lane.id) ? paid.first_pass : null;
         const spent = new Set();
         const resortStage = {
-          keyCount: lastCredentials.keys.length, crosses: false, lastResort: true, firstPass: lastFirst,
+          keyCount: resortKeys, crosses: false, lastResort: true, firstPass: lastFirst, available: true,
           reason: quotaNotes.map((note) => `${note.provider} ${note.banner}`).join('；'),
-          startKey: () => firstUnspent(pickedKey(lane.id, last.provider), lastCredentials.keys.length, spent),
-          route: (model, key) => ({ provider: last.provider, credentialLane: lane.id, modelId: model.id, keyIndex: key }),
+          startKey: () => firstUnspent(resortKeys, spent),
+          route: (current, key) => ({ provider: paid.provider, credentialLane: resort.credentialLane, modelId: current.id, keyIndex: key }),
           spent,
           creditSpent: new Set(),
-          degraded: () => false,
         };
-        for (const model of [lastFirst, last.primary].filter(Boolean)) {
-          console.log(`[Lane ${lane.id}] ${lane.provider} and ${crossProvider} both report a spent quota; the last resort sends the review to ${model.id} on ${last.provider} through the Lane ${lane.id} secret slot${model === lastFirst ? ' as this PR\'s first pass' : ''}.`);
-          await statusPublisher.update(lane.id, 'last_resort', `${model.id} @ ${last.provider}`);
-          const served = await attemptModel(model, resortStage);
+        for (const current of [lastFirst, paid.model ?? model].filter(Boolean)) {
+          console.log(`[Lane ${lane.id}] ${plans.join(' and ')} all report a spent quota; the last resort sends the review to ${current.id} on ${paid.provider} through the Lane ${resort.credentialLane} secret slot${current === lastFirst ? ' as this PR\'s first pass' : ''}.`);
+          await statusPublisher.update(lane.id, 'last_resort', `${current.id} @ ${paid.provider}`);
+          const served = await attemptModel(current, resortStage);
           if (served) return served;
         }
       }
@@ -1191,7 +1138,7 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
             : 'Action needed: inspect the upstream response above to identify the request or auth problem.',
     ].join('\n');
 
-    return { lane, primary, servedBy: null, review, reasoningLength: 0, degraded: false, status: 'diagnostic',
+    return { lane, servedBy: null, review, reasoningLength: 0, status: 'diagnostic',
       quotaDetail: quotaNotes.map((note) => note.status).join('；'), onlyQuota: onlyQuota && quotaNotes.length > 0 };
   }
 
@@ -1215,7 +1162,7 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
   // Reused and skipped lanes keep the valid evidence their comments already show.
   const validLaneIds = new Set(lanes.filter((lane) => ['reuse', 'skip'].includes(plans.get(lane.id).mode)).map((lane) => lane.id));
   async function reviewAndPublish(lane) {
-    const primary = lane.primary;
+    const laneModel = lane.model;
     const result = await requestReview(lane);
     // Each lane validates freshness immediately before its own publication.
     // A slow lane must never delay an already-completed review.
@@ -1226,28 +1173,25 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
       return;
     }
     const reviewedAt = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
-    const { servedBy, servedVia, servedKey, review, reasoningLength, reasoningUnit, degraded, status, firstPass } = result;
+    const { servedBy, servedVia, servedKey, review, reasoningLength, reasoningUnit, status, firstPass } = result;
     const crossLabel = servedVia?.label;
     const servedModelId = crossLabel ? servedVia.modelId : servedBy?.id;
     const keyText = servedKey ? ` · key ${servedKey.index + 1}/${servedKey.count}` : '';
     const viaText = servedVia?.lastResort ? ` via ${servedVia.provider} (last resort: plan quotas spent)${keyText}`
-      : servedVia ? ` via ${servedVia.provider} ${servedVia.modelId} (${lane.provider} unavailable)` : keyText;
+      : servedVia ? ` via ${servedVia.provider} ${servedVia.modelId} (${ownProvider(lane)} unavailable)` : keyText;
     // Only a valid first-pass review is marked; later reviews carry it, folded and unchanged.
     const isFirstPass = firstPass === true && status === 'valid';
     const prior = isFirstPass ? null : priorFirstPass(lane);
     const modelLine = crossLabel
-      ? `Lane ${lane.id}: ${servedModelId} via ${servedVia.provider} (${servedBy.id} on ${lane.provider} unavailable)`
-      : degraded
-      ? `Lane ${lane.id}: ${primary.id} unavailable -> served by ${servedBy.id}${viaText}`
-      : `Lane ${lane.id}: ${servedBy?.id ?? primary.id}${isFirstPass ? ' (first pass)' : ''}${viaText}`;
+      ? `Lane ${lane.id}: ${servedModelId} via ${servedVia.provider} (${servedBy.id} on ${ownProvider(lane)} unavailable)`
+      : `Lane ${lane.id}: ${servedBy?.id ?? laneModel.id}${isFirstPass ? ' (first pass)' : ''}${viaText}`;
     const banner = [
-      ...(degraded ? [`> ℹ️ Lane ${lane.id} 的 \`${primary.label}\` 未产生可用审核，本条 review 由同通道备用模型 \`${servedBy.label}\` 生成。`] : []),
-      ...(servedVia?.lastResort ? [`> ℹ️ Lane ${lane.id} 的两家套餐额度都已用完（${result.lastResortReason}），本条 review 由最后兜底 \`${servedBy.label}\` 经 \`${servedVia.provider}\`（Lane ${lane.id} 的固定 Secret 槽位）生成。`]
-        : servedVia ? [`> ℹ️ Lane ${lane.id} 的 \`${servedBy.label}\` 在 \`${lane.provider}\` 上未产生可用审核${result.ownQuota ? `（${result.ownQuota.banner}）` : ''}，本条 review 由${crossLabel ? `兜底模型 \`${crossLabel}\` ` : '同一模型'}经 \`${servedVia.provider}\`（Lane ${servedVia.credentialLane} 的固定 Secret 槽位）生成。`] : []),
+      ...(servedVia?.lastResort ? [`> ℹ️ Lane ${lane.id} 的两家套餐额度都已用完（${result.lastResortReason}），本条 review 由最后兜底 \`${servedBy.label}\` 经 \`${servedVia.provider}\`（Lane ${servedVia.credentialLane} 的固定 Secret 槽位）生成。`]
+        : servedVia ? [`> ℹ️ Lane ${lane.id} 的 \`${servedBy.label}\` 在 \`${ownProvider(lane)}\` 上未产生可用审核${result.ownQuota ? `（${result.ownQuota.banner}）` : ''}，本条 review 由${crossLabel ? `兜底模型 \`${crossLabel}\` ` : '同一模型'}经 \`${servedVia.provider}\`（Lane ${servedVia.credentialLane} 的固定 Secret 槽位）生成。`] : []),
       ...(servedKey?.from ? [`> ℹ️ Lane ${lane.id} 的第 ${servedKey.from.index + 1} 把 key 未能服务（${servedKey.from.reason}），本条 review 由同一模型经同一 Secret 槽位的第 ${servedKey.index + 1} 把 key 生成。`] : []),
     ];
     if (isFirstPass) {
-      banner.push(`> ℹ️ 这是本 PR 的首次审核，由 \`${servedBy.label}\` 完成；后续提交由 \`${primary.label}\` 审核，本条首审会折叠保留在评论底部。`);
+      banner.push(`> ℹ️ 这是本 PR 的首次审核，由 \`${servedBy.label}\` 完成；后续提交由 \`${laneModel.label}\` 审核，本条首审会折叠保留在评论底部。`);
     }
     const incremental = status === 'valid' ? incrementalContexts.get(lane.id) : undefined;
     if (incremental) {
@@ -1267,7 +1211,7 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
       : laneRecords.get(lane.id)?.state ?? null;
     const recordLine = record ? [encodeState(record)] : [];
     const servedLabel = servedBy && servedVia ? `${servedModelId} via ${servedVia.provider}` : servedModelId;
-    const priorLabel = prior && ([lane.first_pass, lane.last_resort?.first_pass].find((model) => model?.id === prior.model)?.label ?? prior.model);
+    const priorLabel = prior && ([lane.first_pass, ...lane.routes.map((route) => route.first_pass)].find((model) => model?.id === prior.model)?.label ?? prior.model);
     const carried = (content) => prior ? ['',
       `<details><summary>首审 · ${priorLabel} · 提交 ${prior.head.slice(0, 7)}</summary>`, '',
       firstPassBegin(lane.id, prior.head, prior.model), content, FIRST_PASS_END, '', '</details>'] : [];
@@ -1277,7 +1221,7 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
       `<!-- ai-pr-review-bot:lane-${lane.id} -->`,
       `<!-- ai-pr-review-evidence:v2 lane=${lane.id} head=${reviewHeadSha} workflow=${workflowSha} status=${status} -->`,
       ...recordLine,
-      `## AI PR Review · Lane ${lane.id} · ${crossLabel ?? servedBy?.label ?? primary.label}${isFirstPass ? ' · 首审' : ''}${incremental ? ' · 增量' : ''}`,
+      `## AI PR Review · Lane ${lane.id} · ${crossLabel ?? servedBy?.label ?? laneModel.label}${isFirstPass ? ' · 首审' : ''}${incremental ? ' · 增量' : ''}`,
       '',
       `> 审核提交：\`${reviewedHeadShortSha}\` · 更新时间：\`${reviewedAt}\` · 此评论会随 PR 新提交原地更新 · [Run](${runUrl})`,
       '',

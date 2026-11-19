@@ -331,21 +331,26 @@ const repositoryConfig = (name) => JSON.parse(fs.readFileSync(path.join(here, '.
 // NebulaLab's own config (Lane B on Anthropic with a Sonnet first pass) has its own checks below.
 // The shared policy checks keep the Go Lane B every other repository still uses.
 const nebulaConfig = repositoryConfig('NebulaLab');
-// The other repositories' lanes on plain slots, as they ran before their last resorts (2026-11-03).
+// The other repositories' lanes on plain slots, as they ran before their last resorts (2026-11-03):
+// each slot holds only its own lane's first provider, and no lane has a plans_spent route. A later
+// route then uses the slot that holds its provider: Go through Lane A, Command Code through Lane C.
 // The shared policy checks run on these; the bundled slots and last resorts have their own checks below.
-const licenseConfig = repositoryConfig('NebulaGraph-License-Service');
-const plainSlots = (lanes) => lanes.map((source) => {
-  const lane = structuredClone(source);
-  delete lane.credential_providers;
-  delete lane.last_resort;
-  delete lane.primary.cross_provider?.credential_provider;
-  return lane;
-});
-const centralConfig = { ...structuredClone(nebulaConfig), lanes: plainSlots(licenseConfig.lanes) };
-// Exercise the previously deployed NebulaLab policy as well as the new bundled-slot policy.
-const legacyNebulaConfig = { ...structuredClone(nebulaConfig), lanes: centralConfig.lanes.map((lane) => structuredClone(lane.id === 'B' ? nebulaConfig.lanes[1] : lane)) };
-legacyNebulaConfig.lanes[1].primary.cross_provider = legacyNebulaConfig.lanes[1].primary.cross_provider.at(-1);
-delete legacyNebulaConfig.lanes[1].primary.cross_provider.credential_provider;
+// A frozen copy of License-Service's config as of 2026-11-18, before its Lane C moved to MiniMax M3.1
+// Flash: the runner policy checks below build on it, so a production model change does not silently
+// change what they exercise. test/route-table.test.mjs covers every live config.
+const licenseConfig = JSON.parse(fs.readFileSync(path.join(here, 'fixtures', 'runner-policy-config.json'), 'utf8'));
+const plainSlots = (source) => {
+  const lanes = structuredClone(source.lanes).map((lane) => ({ ...lane, routes: lane.routes.filter((route) => !route.when) }));
+  return { key_slots: Object.fromEntries(lanes.map((lane) => [lane.id, [lane.routes[0].provider]])), lanes };
+};
+const centralConfig = { ...structuredClone(nebulaConfig), ...plainSlots(licenseConfig) };
+// Exercise the previously deployed NebulaLab policy as well as the new bundled-slot policy: NebulaLab's
+// Lane B (Anthropic, with a Sonnet first pass) on its own plain slot among those lanes, crossing only to
+// Command Code.
+const legacyNebulaConfig = structuredClone(centralConfig);
+legacyNebulaConfig.key_slots.B = ['anthropic'];
+legacyNebulaConfig.lanes[1] = { ...structuredClone(nebulaConfig.lanes[1]),
+  routes: nebulaConfig.lanes[1].routes.filter((route) => route.provider !== 'opencode-go') };
 const patch = (filename, size) => ({ filename, status: 'modified', additions: 2, deletions: 1, patch: `@@\n${'+x\n'.repeat(size)}` });
 const files = [patch('src/a.ts', 100), patch('tests/a.test.ts', 100)];
 const headSha = 'deadbeef'.repeat(5);
@@ -870,8 +875,8 @@ check('text that exists but cannot fit the budget still fails as missing review 
 // repository default allows, without pushing the same material at smaller models.
 const perModelBudgetConfig = structuredClone(centralConfig);
 perModelBudgetConfig.review_policy.diff_char_budget = 4000;
-for (const lane of perModelBudgetConfig.lanes) for (const model of [lane.primary, ...lane.fallbacks]) delete model.diff_char_budget;
-perModelBudgetConfig.lanes[0].primary.diff_char_budget = 20000;
+for (const lane of perModelBudgetConfig.lanes) delete lane.model.diff_char_budget;
+perModelBudgetConfig.lanes[0].model.diff_char_budget = 20000;
 const bigFileReview = ({ model }) => reply(200, JSON.stringify({ model: `provider/${model}`, choices: [{ finish_reason: 'stop', message: {
   content: JSON.stringify({ summary: 'big file reviewed', reviewed_files: ['src/big.ts'], findings: [], limitations: [] }) } }] }));
 r = await scenario(bigFileReview, { PR_REVIEW_CONFIG: JSON.stringify(perModelBudgetConfig) }, { files: [patch('src/big.ts', 3000)] });
@@ -881,10 +886,10 @@ check('a model-level diff budget supplies material beyond the repository default
   && r.posted.some(body => body.includes('lane-A') && body.includes('提供 1/1 个文件'))
   && r.posted.some(body => body.includes('lane-B') && body.includes('No complete inspectable text patch')));
 const invalidModelBudgetConfig = structuredClone(centralConfig);
-invalidModelBudgetConfig.lanes[0].primary.diff_char_budget = 0;
+invalidModelBudgetConfig.lanes[0].model.diff_char_budget = 0;
 r = await scenario(healthy, { PR_REVIEW_CONFIG: JSON.stringify(invalidModelBudgetConfig) });
 check('a model-level diff budget must be a positive integer', r.captured.length === 0
-  && /primary\.diff_char_budget must be a positive integer/.test(r.error?.message || ''));
+  && /lanes\[0\]\.model\.diff_char_budget must be a positive integer/.test(r.error?.message || ''));
 
 // Issue background and the PR description were cut at fixed sizes; repositories can raise them.
 const longIssue = { number: 7, title: 'Long background', body: `${'I'.repeat(15000)}END_OF_ISSUE` };
@@ -908,7 +913,9 @@ r = await scenario(healthy, { PR_REVIEW_CONFIG: JSON.stringify(invalidContextBud
 check('context budgets must be positive integers when configured', r.captured.length === 0
   && /review_policy\.issue_char_budget must be a positive integer/.test(r.error?.message || ''));
 
-// Unserved resend: only a request with no model output at all may be sent again.
+// No resend on the lane's own provider: a request with no model output at all (an unserved 429 or
+// 5xx, a stream closed before any token) goes to the next route like any other failure. Schema 2
+// removed the opt-in unserved resend.
 const unserved = (httpStatus, extra = {}) => Object.assign(new Error(`SDK request failed (http=${httpStatus}).`),
   { name: 'SDKRequestError', status: httpStatus === 200 ? undefined : httpStatus, httpStatus, unserved: true,
     providerType: 'server_error', ...extra });
@@ -920,36 +927,19 @@ const firstCallFails = (lane, model, error) => {
 // (Command Code) and its cross-provider request through the Lane A slot (Go).
 const lunaOnCommandCode = ({ lane, model }) => lane === 'C' && model === 'gpt-6-luna';
 const lunaOnGo = ({ lane, model }) => lane === 'A' && model === 'gpt-6-luna';
-// The resend is opt-in per lane and no production lane uses it any more; it is exercised here on Lane C.
-const resendConfig = structuredClone(centralConfig);
-resendConfig.lanes[2].resend_unserved = true;
-const resendEnv = { PR_REVIEW_CONFIG: JSON.stringify(resendConfig) };
-r = await scenario(firstCallFails('C', 'gpt-6-luna', unserved(429)), resendEnv);
-check('an unserved Lane C 429 is resent once with a fresh session and still counts as the primary', !r.error
-  && r.captured.filter(lunaOnCommandCode).length === 2
-  && !r.captured.some(lunaOnGo) && r.timeouts.includes(30000)
-  && r.posted.some((body) => body.includes('lane=C') && body.includes('status=valid') && !body.includes('served by') && !body.includes(' via '))
-  && r.statusUpdates.some((body) => body.includes('换会话重发')) && r.logs.some((line) => line.includes('attempt 2')));
-r = await scenario(firstCallFails('C', 'gpt-6-luna', unserved(429, { retryAfterMs: 5000 })), resendEnv);
-check('a provider retry-after paces the single resend', !r.error && r.timeouts.includes(5000) && !r.timeouts.includes(30000));
-r = await scenario(firstCallFails('C', 'gpt-6-luna', unserved(200, { code: 'REVIEW_INCOMPLETE_STREAM' })), resendEnv);
-check('a stream queued and closed before any output is resent immediately', !r.error
-  && r.captured.filter(lunaOnCommandCode).length === 2 && r.timeouts.includes(0));
-r = await scenario((call) => lunaOnCommandCode(call) ? Promise.reject(unserved(503)) : healthy(call), resendEnv);
-check('a resend that is also unserved crosses once to the other provider instead of retrying again', !r.error
-  && r.captured.filter(lunaOnCommandCode).length === 2 && r.captured.filter(lunaOnGo).length === 1
-  && r.posted.some((body) => body.includes('Lane C: gpt-6-luna via opencode-go gpt-6-luna (command-code unavailable)')));
 for (const [label, error] of [
+  ['unserved capacity 429s', unserved(429)],
+  ['streams closed before any output', unserved(200, { code: 'REVIEW_INCOMPLETE_STREAM' })],
   ['plan usage limits', unserved(429, { providerType: 'GoUsageLimitError' })],
   ['output that was already produced', Object.assign(unserved(200), { unserved: false })],
   ['the local deadline', Object.assign(new Error('AI endpoint request aborted (model deadline reached).'), { name: 'AbortError', unserved: false })],
 ]) {
-  r = await scenario(firstCallFails('C', 'gpt-6-luna', error), resendEnv);
-  check(`${label} are never resent`, r.captured.filter(lunaOnCommandCode).length === 1
+  r = await scenario(firstCallFails('C', 'gpt-6-luna', error));
+  check(`${label} are never resent on the same provider`, r.captured.filter(lunaOnCommandCode).length === 1
     && r.captured.filter(lunaOnGo).length === 1);
 }
 r = await scenario(firstCallFails('B', 'claude-haiku-5-5', unserved(429)));
-check('lanes without resend_unserved keep exactly one request per model and route', !r.error
+check('every lane keeps exactly one request per model and route', !r.error
   && r.captured.filter(({ lane, model }) => lane === 'B' && model === 'claude-haiku-5-5').length === 1
   && r.captured.filter(({ lane, model }) => lane === 'C' && model === 'claude-haiku-5-5').length === 1);
 // NebulaLab #1296 (Lane C then ran Hy3): Command Code rate-limited the request, then Go streamed the
@@ -966,10 +956,12 @@ check('a stream closed before the model finished is named as such, not as a fail
   && /gpt-6-luna via opencode-go gpt-6-luna -> HTTP 200, stream closed before the model finished after \d+ s \(1 attempt\(s\)\)/.test(closedStreamComment)
   && closedStreamComment.includes('this is not a rate limit, quota or authentication failure. opencode-go accepted the request (HTTP 200)')
   && !closedStreamComment.includes('HTTP request failed') && !closedStreamComment.includes('request or auth problem'));
-const invalidResendConfig = structuredClone(centralConfig);
-invalidResendConfig.lanes[2].resend_unserved = 'yes';
-r = await scenario(healthy, { PR_REVIEW_CONFIG: JSON.stringify(invalidResendConfig) });
-check('resend_unserved must be a boolean', r.captured.length === 0 && /resend_unserved must be a boolean/.test(r.error?.message || ''));
+// A stale config that still asks for the resend fails before dispatch rather than silently losing it.
+const staleResendConfig = structuredClone(centralConfig);
+staleResendConfig.lanes[2].resend_unserved = true;
+r = await scenario(healthy, { PR_REVIEW_CONFIG: JSON.stringify(staleResendConfig) });
+check('resend_unserved is rejected as removed in schema 2', r.captured.length === 0
+  && /lanes\[2\]\.resend_unserved was removed in schema 2/.test(r.error?.message || ''));
 check('no repository profile resends on the same provider', fs.readdirSync(path.join(here, '..', 'review-action', 'config', 'repositories'))
   .every((name) => JSON.parse(fs.readFileSync(path.join(here, '..', 'review-action', 'config', 'repositories', name), 'utf8'))
     .lanes.every((lane) => lane.resend_unserved === undefined)));
@@ -983,16 +975,19 @@ check('contract diagnostics expose the safe local reason without leaking rejecte
   && r.captured.filter(lunaOnCommandCode).length === 1 && r.captured.filter(lunaOnGo).length === 1
   && r.posted.some(body => body.includes('no supplied file was reviewed') && body.includes('not an authentication or HTTP failure'))
   && !r.posted.some(body => body.includes('PRIVATE_REPORT_CONTENT')));
-// The engine still runs one different-model fallback per lane when a config names one.
-const kimiFallback = { id: 'kimi-k2.7-code', label: 'Kimi K2.7 Code', protocol: 'openai-chat-completions', request_timeout_ms: 900000, context_profile: 'full', max_output_tokens: 65536 };
+// A model with its own protocol inside a lane: here a full-context first pass ahead of a lane model
+// whose throttled pack is empty, and below Lane B's model on Go.
+const kimiModel = { id: 'kimi-k2.7-code', label: 'Kimi K2.7 Code', protocol: 'openai-chat-completions', request_timeout_ms: 900000, context_profile: 'full', max_output_tokens: 65536 };
 const emptyThrottledConfig = structuredClone(centralConfig);
-emptyThrottledConfig.lanes[1].primary.context_profile = 'kimi-k3-throttled';
-emptyThrottledConfig.lanes[1].fallbacks = [kimiFallback];
-r = await scenario(healthy, { PR_REVIEW_CONFIG: JSON.stringify(emptyThrottledConfig) }, { files: [patch('src/a.ts', 500), patch('tests/a.test.ts', 500)] });
+emptyThrottledConfig.lanes[1].model.context_profile = 'kimi-k3-throttled';
+emptyThrottledConfig.lanes[1].first_pass = kimiModel;
+r = await scenario((call) => call.model === 'kimi-k2.7-code' ? reply(503, 'unavailable') : healthy(call),
+  { PR_REVIEW_CONFIG: JSON.stringify(emptyThrottledConfig) }, { files: [patch('src/a.ts', 500), patch('tests/a.test.ts', 500)] });
 check('a model whose actual context pack is empty is skipped on both providers without consuming a request', !r.error
   && !r.captured.some(call => call.model === 'claude-haiku-5-5')
-  && r.captured.filter(call => call.lane === 'B').length === 1
-  && r.posted.some(body => body.includes('served by kimi-k2.7-code')));
+  && r.captured.filter(call => call.lane === 'B').map(({ model }) => model).join() === 'kimi-k2.7-code'
+  && r.posted.some(body => body.includes('lane=B') && body.includes('status=diagnostic')
+    && body.includes('claude-haiku-5-5 -> no inspectable material for the configured context profile (0 attempt(s))')));
 const validEvidence = ['A', 'B', 'C'].map((lane) => evidenceComment(lane));
 const quotedMarkers = validEvidence.map(item => ({ ...item }));
 quotedMarkers[0].body += '\nQuoted source: <!-- ai-pr-review-bot:lane-C -->';
@@ -1054,12 +1049,14 @@ const duplicateComments = [
   { id: 12, body: '<!-- ai-pr-review-bot:lane-B -->\nold review' },
 ];
 const googleConfig = structuredClone(centralConfig);
+googleConfig.key_slots.C = ['google'];
+// No slot holds Command Code any more, so Lanes A and B keep only their own Go route.
+for (const lane of googleConfig.lanes.slice(0, 2)) lane.routes = lane.routes.slice(0, 1);
 googleConfig.lanes[2] = {
   id: 'C',
-  provider: 'google',
   protocol: 'google-generate-content',
-  primary: { id: 'gemini-3.7-flash', label: 'Gemini-3.7-Flash', context_profile: 'full', max_output_tokens: 16384, thinking_level: 'high' },
-  fallbacks: [],
+  model: { id: 'gemini-3.7-flash', label: 'Gemini-3.7-Flash', context_profile: 'full', max_output_tokens: 16384, thinking_level: 'high' },
+  routes: [{ provider: 'google' }],
 };
 const googleOverrides = {
   PR_REVIEW_CONFIG: JSON.stringify(googleConfig),
@@ -1219,7 +1216,7 @@ for (const [label, overrides] of [
   check(`${label} cannot send Lane C directly to Go`, laneCFailedClosed(r));
 }
 const unknownGoModel = structuredClone(centralConfig);
-unknownGoModel.lanes[1].primary.id = 'future-go-model';
+unknownGoModel.lanes[1].model.id = 'future-go-model';
 r = await scenario(healthy, { PR_REVIEW_CONFIG: JSON.stringify(unknownGoModel),
   RUNNER_ENVIRONMENT: 'self-hosted', https_proxy: 'http://177.201.224.95:13128' });
 check('unverified Go models retain the approved proxy instead of inheriting Lane B direct routing',
@@ -1228,7 +1225,7 @@ r = await scenario(healthy, { RUNNER_ENVIRONMENT: 'github-hosted', https_proxy: 
 check('explicit GitHub-hosted runtime ignores ambient proxy for Go', !r.error && r.captured.every(c => c.proxy === undefined));
 
 const overriddenConfig = structuredClone(centralConfig);
-overriddenConfig.lanes[0].primary.max_output_tokens = 8192;
+overriddenConfig.lanes[0].model.max_output_tokens = 8192;
 r = await scenario(healthy, { PR_REVIEW_CONFIG: JSON.stringify(overriddenConfig) });
 check('repository configuration supplied through the environment remains authoritative', r.error === undefined
   && r.captured.find(({ lane }) => lane === 'A')?.body.max_output_tokens === 8192
@@ -1275,10 +1272,10 @@ check('Lane C asks GPT-6 Luna on Go through the Lane A slot once, never another 
   && r.captured.every(({ model }) => ['muse-spark-1.3-contributor', 'claude-haiku-5-5', 'gpt-6-luna'].includes(model))
   && r.posted.some((body) => body.includes('Lane C: gpt-6-luna via opencode-go gpt-6-luna (command-code unavailable)')));
 
-// Without a configured cross route a plan quota keeps the lane on its own provider, and with
-// no other model configured the lane publishes a quota diagnostic.
+// Without a later route a plan quota keeps the lane on its own provider, and the lane publishes a
+// quota diagnostic.
 const noCrossConfig = structuredClone(centralConfig);
-for (const lane of noCrossConfig.lanes) delete lane.primary.cross_provider;
+for (const lane of noCrossConfig.lanes) lane.routes = lane.routes.slice(0, 1);
 r = await scenario((call) => call.lane === 'A' ? reply(429, '{"error":{"code":"insufficient_quota","message":"weekly quota exhausted"}}') : healthy(call),
   { PR_REVIEW_CONFIG: JSON.stringify(noCrossConfig) });
 check('quota failure without a cross route stays on its provider without affecting other lanes', r.captured.filter(({ lane }) => lane === 'A').length === 1
@@ -1400,24 +1397,19 @@ r = await scenario((call) => lunaOnCommandCode(call) ? reply(429, '{"error":{"co
 check('a generic usage-limit message is not relabelled as an exhausted quota by the runner', !r.error
   && laneComment(r, 'C').includes('gpt-6-luna -> HTTP 429 (1 attempt(s))') && !laneComment(r, 'C').includes('额度用尽'));
 
-// A config may still name a different-model fallback; each model then gets its own cross route,
-// in order: the primary here, the primary there, the fallback here, the fallback there.
-const withFallbackConfig = structuredClone(centralConfig);
-withFallbackConfig.lanes[0].fallbacks = [{ id: 'muse-spark-1.2-contributor', label: 'Muse Spark 1.2 Contributor', context_profile: 'full',
-  max_output_tokens: 65536, cross_provider: { credential_lane: 'C', id: 'meta/muse-spark-1.2-contributor' } }];
-r = await scenario((call) => call.model.includes('muse-spark') && call.model !== 'meta/muse-spark-1.2-contributor' ? reply(503, '{"error":"unavailable"}') : healthy(call),
-  { PR_REVIEW_CONFIG: JSON.stringify(withFallbackConfig) });
-check('a configured fallback model runs only after the primary failed on both providers, then crosses once itself', !r.error
-  && r.captured.filter(({ model }) => model.includes('muse-spark')).map(({ lane, model }) => `${lane}:${model}`).join(',')
-    === 'A:muse-spark-1.3-contributor,C:meta/muse-spark-1.3-contributor,A:muse-spark-1.2-contributor,C:meta/muse-spark-1.2-contributor'
-  && r.posted.some((body) => body.includes('Lane A: muse-spark-1.3-contributor unavailable -> served by muse-spark-1.2-contributor via command-code meta/muse-spark-1.2-contributor (opencode-go unavailable)')));
-// ci-central#72 review: one spent plan is named once, however many models of the lane it stopped.
+// ci-central#72 review: one spent plan is named once, however many models of the lane it stopped. A
+// lane's two models are its first pass, asked on its first route only, and its model, which then
+// crosses: Go stops both here.
+const withFirstPassConfig = structuredClone(centralConfig);
+withFirstPassConfig.lanes[0].first_pass = { id: 'muse-spark-1.2-contributor', label: 'Muse Spark 1.2 Contributor', context_profile: 'full',
+  max_output_tokens: 65536 };
 r = await scenario((call) => call.lane === 'A' ? Promise.reject(goWeekly)
   : call.model.startsWith('meta/muse-spark') ? Promise.reject(commandCodeWeekly) : healthy(call),
-{ PR_REVIEW_CONFIG: JSON.stringify(withFallbackConfig) });
+{ PR_REVIEW_CONFIG: JSON.stringify(withFirstPassConfig) });
 const twiceQuota = laneComment(r, 'A');
 check('a spent plan that stopped two models of the lane is named once', !r.error
-  && r.captured.filter(({ model }) => model.includes('muse-spark')).length === 4
+  && r.captured.filter(({ model }) => model.includes('muse-spark')).map(({ lane, model }) => `${lane}:${model}`).join(',')
+    === 'A:muse-spark-1.2-contributor,A:muse-spark-1.3-contributor,C:meta/muse-spark-1.3-contributor'
   && twiceQuota.split('`opencode-go` 的周用量上限已用完').length === 2 && twiceQuota.split('`command-code` 的周用量上限已用完').length === 2
   && twiceQuota.split('the opencode-go plan quota is exhausted').length === 2 && twiceQuota.split('the command-code plan quota is exhausted').length === 2
   && r.statusUpdates.at(-1).includes('供应商额度用尽，审核未生成（opencode-go 周上限已用完，北京时间 2026-10-20 11:30 重置；command-code 周上限已用完，北京时间 2026-10-22 16:56 重置） |'));
@@ -1427,21 +1419,15 @@ r = await scenario((call) => call.lane === 'A'
   ? Promise.reject(quotaError({ code: undefined, type: 'GoUsageLimitError', window: 'weekly',
     resetAt: call.model === 'muse-spark-1.3-contributor' ? '2026-10-20T03:30:00.000Z' : '2026-10-20T03:30:01.000Z' }))
   : call.model.startsWith('meta/muse-spark') ? Promise.reject(commandCodeWeekly) : healthy(call),
-{ PR_REVIEW_CONFIG: JSON.stringify(withFallbackConfig) });
+{ PR_REVIEW_CONFIG: JSON.stringify(withFirstPassConfig) });
 check('a spent plan is named once even when its reset times differ by a second', !r.error
   && laneComment(r, 'A').split('`opencode-go` 的周用量上限已用完').length === 2
   && laneComment(r, 'A').split('the opencode-go plan quota is exhausted').length === 2);
-// The cross-provider request gets a full model window of its own, even after a resend spent
-// part of the window on the lane's own provider.
-const resendThenQuotaConfig = structuredClone(centralConfig);
-resendThenQuotaConfig.lanes[0].resend_unserved = true;
-let laneAGoCalls = 0;
-r = await scenario((call) => call.lane === 'A' && call.model === 'muse-spark-1.3-contributor'
-  ? (laneAGoCalls++ === 0 ? Promise.reject(unserved(503, { retryAfterMs: 5000 })) : goQuotaReply()) : healthy(call),
-{ PR_REVIEW_CONFIG: JSON.stringify(resendThenQuotaConfig) });
-check('a cross-provider request gets a full model window even after a resend', !r.error
+// The cross-provider request gets a full model window of its own, not what is left of the window
+// the lane's own provider used.
+r = await scenario((call) => call.lane === 'A' && call.model === 'muse-spark-1.3-contributor' ? goQuotaReply() : healthy(call));
+check('a cross-provider request gets a full model window of its own', !r.error
   && r.captured.filter(({ model }) => model === 'meta/muse-spark-1.3-contributor').length === 1
-  && r.timeouts.filter((ms) => ms > 590000 && ms <= 595000).length === 1
   && r.timeouts.filter((ms) => ms === 600000).length === 2);
 for (const [label, failure] of [
   ['a provider outage', () => reply(503, '{"error":"upstream unavailable"}')],
@@ -1466,10 +1452,10 @@ check('on self-hosted runners the cross route leaves the Go proxy for the direct
   && r.logs.some((line) => line.includes('[Lane A/muse-spark-1.3-contributor] egress=approved-proxy'))
   && !r.logs.some((line) => line.includes('[Lane A/meta/muse-spark-1.3-contributor] egress=')));
 const sameProviderCross = structuredClone(centralConfig);
-sameProviderCross.lanes[0].primary.cross_provider.credential_lane = 'B';
+sameProviderCross.lanes[0].routes[1].provider = 'opencode-go';
 r = await scenario(healthy, { PR_REVIEW_CONFIG: JSON.stringify(sameProviderCross) });
 check("a cross route onto the lane's own provider fails before dispatch", r.captured.length === 0
-  && /provider other than the lane's own/.test(r.error?.message || ''));
+  && /lanes\[0\]\.routes must list distinct providers/.test(r.error?.message || ''));
 
 r = await scenario((call) => { if (call.lane === 'A' || call.model.startsWith('meta/')) throw new Error('fetch failed'); return healthy(call); });
 check('network failures try the model once on each provider', r.captured.filter(({ lane }) => lane === 'A').length === 1
@@ -1503,8 +1489,7 @@ check('a partial review does not count toward the quorum', /1 of 3 lanes/.test(r
   && r.posted.some((body) => body.includes('lane-A') && body.includes('status=partial')));
 
 const sameModelConfig = structuredClone(centralConfig);
-sameModelConfig.lanes[1].primary = { ...sameModelConfig.lanes[1].primary, id: 'muse-spark-1.3-contributor', label: 'Qwen via Lane B' };
-sameModelConfig.lanes[1].fallbacks = [];
+sameModelConfig.lanes[1].model = { ...sameModelConfig.lanes[1].model, id: 'muse-spark-1.3-contributor', label: 'Qwen via Lane B' };
 r = await scenario(healthy, { PR_REVIEW_CONFIG: JSON.stringify(sameModelConfig) });
 check('identical model ids on different providers remain lane-scoped', r.captured.filter(({ model }) => model === 'muse-spark-1.3-contributor').length === 2
   && r.captured.some(({ lane, model, headers }) => lane === 'A' && model === 'muse-spark-1.3-contributor' && headers.authorization === 'Bearer lane-a-key')
@@ -1512,19 +1497,12 @@ check('identical model ids on different providers remain lane-scoped', r.capture
 
 const protocolConfig = structuredClone(centralConfig);
 protocolConfig.lanes[1].protocol = 'openai-chat-completions';
-protocolConfig.lanes[1].primary = { id: 'gemini-3.7-flash', label: 'Gemini via OpenAI protocol', context_profile: 'full', max_output_tokens: 65536 };
-protocolConfig.lanes[1].fallbacks = [];
+protocolConfig.lanes[1].model = { id: 'gemini-3.7-flash', label: 'Gemini via OpenAI protocol', context_profile: 'full', max_output_tokens: 65536 };
 r = await scenario(healthy, { PR_REVIEW_CONFIG: JSON.stringify(protocolConfig) });
 check('protocol is bound to lane rather than inferred from model id', r.captured.some(({ lane, model, url }) => lane === 'B' && model === 'gemini-3.7-flash' && url.endsWith('/chat/completions')));
 
-const throttledGoogleConfig = structuredClone(centralConfig);
-throttledGoogleConfig.lanes[2] = {
-  id: 'C',
-  provider: 'google',
-  protocol: 'google-generate-content',
-  primary: { id: 'gemini-3.7-flash', label: 'Gemini-3.7-Flash', context_profile: 'kimi-k3-throttled', max_output_tokens: 8192, thinking_level: 'high' },
-  fallbacks: [],
-};
+const throttledGoogleConfig = structuredClone(googleConfig);
+throttledGoogleConfig.lanes[2].model = { id: 'gemini-3.7-flash', label: 'Gemini-3.7-Flash', context_profile: 'kimi-k3-throttled', max_output_tokens: 8192, thinking_level: 'high' };
 r = await scenario(healthy, {
   PR_REVIEW_CONFIG: JSON.stringify(throttledGoogleConfig),
   LANE_C_API_BASE: 'https://generativelanguage.googleapis.com/v1beta',
@@ -1535,23 +1513,23 @@ check('Google protocol honors the configured throttled context profile', throttl
   && throttledGoogle.systemInstruction.parts[0].text.includes('two independent internal review passes')
   && throttledGoogle.contents[0].parts[0].text.includes('All changed file names:'));
 
-// Lane B: Claude Haiku 5.5 over Go's Anthropic Messages endpoint, Kimi fallback over chat
-// completions in the same lane. Lane C: Gemini 4 Argon over Go's Gemini endpoint, Hy3 fallback.
+// Lane B: Claude Haiku 5.5 over Go's Anthropic Messages endpoint. Lane C: Gemini 4 Argon over Go's
+// Gemini endpoint.
 const goModelsConfig = structuredClone(centralConfig);
+// Every lane is on Go here, so no lane has another provider to cross to.
+goModelsConfig.key_slots = { A: ['opencode-go'], B: ['opencode-go'], C: ['opencode-go'] };
+goModelsConfig.lanes[0].routes = [{ provider: 'opencode-go' }];
 goModelsConfig.lanes[1] = { ...goModelsConfig.lanes[1], protocol: 'anthropic-messages',
-  primary: { id: 'claude-haiku-5-5', label: 'Claude Haiku 5.5', context_profile: 'full', max_output_tokens: 65536, effort: 'high', diff_char_budget: 1200000 },
-  fallbacks: [{ id: 'kimi-k2.7-code', label: 'Kimi K2.7 Code', protocol: 'openai-chat-completions', request_timeout_ms: 900000, context_profile: 'full', max_output_tokens: 65536 }] };
-goModelsConfig.lanes[2] = { ...goModelsConfig.lanes[2], provider: 'opencode-go', protocol: 'google-generate-content',
-  primary: { id: 'gemini-4-argon-contributor', label: 'Gemini 4 Argon Contributor', context_profile: 'full', max_output_tokens: 65536, thinking_level: 'high', diff_char_budget: 1200000, reporting_calibration: true },
-  fallbacks: [{ id: 'hy3', label: 'Hy3', protocol: 'openai-chat-completions', context_profile: 'full', max_output_tokens: 65536 }] };
-// Every lane is on Go here, so Lane A has no other provider to cross to.
-delete goModelsConfig.lanes[0].primary.cross_provider;
+  model: { id: 'claude-haiku-5-5', label: 'Claude Haiku 5.5', context_profile: 'full', max_output_tokens: 65536, effort: 'high', diff_char_budget: 1200000 },
+  routes: [{ provider: 'opencode-go' }] };
+goModelsConfig.lanes[2] = { ...goModelsConfig.lanes[2], protocol: 'google-generate-content',
+  model: { id: 'gemini-4-argon-contributor', label: 'Gemini 4 Argon Contributor', context_profile: 'full', max_output_tokens: 65536, thinking_level: 'high', diff_char_budget: 1200000, reporting_calibration: true },
+  routes: [{ provider: 'opencode-go' }] };
 const goModelsEnv = { PR_REVIEW_CONFIG: JSON.stringify(goModelsConfig), LANE_B_API_BASE: 'https://opencode.ai/zen/go/v1',
   LANE_C_API_BASE: 'https://opencode.ai/zen/go/v1', RUNNER_ENVIRONMENT: 'self-hosted', NEBULA_REVIEW_PROXY_URL: 'http://192.168.122.1:17890' };
 const byModel = (result, id) => result.captured.filter(({ model }) => model === id);
-r = await scenario((call) => call.model === 'claude-haiku-5-5' ? reply(503, 'unavailable') : healthy(call), goModelsEnv);
+r = await scenario(healthy, goModelsEnv);
 const haikuCall = byModel(r, 'claude-haiku-5-5')[0];
-const kimiFallbackCall = byModel(r, 'kimi-k2.7-code')[0];
 check('Claude Haiku uses Anthropic Messages with adaptive thinking, configured effort and the lane key',
   haikuCall?.url === 'https://opencode.ai/zen/go/v1/messages' && haikuCall.headers['x-api-key'] === 'lane-b-key'
   && haikuCall.body.thinking?.type === 'adaptive' && haikuCall.body.output_config?.effort === 'high'
@@ -1561,12 +1539,17 @@ check('Claude Haiku uses Anthropic Messages with adaptive thinking, configured e
   && /-lane-B$/.test(haikuCall.headers['x-opencode-session'] || ''));
 // Since Lane C moved to Responses, this is where a Chat Completions request shows its own output
 // ceiling, and where a verified model's direct Go route keeps its session on a self-hosted runner.
-check('a fallback with its own protocol keeps chat completions and its direct Go egress inside the lane',
-  kimiFallbackCall?.url === 'https://opencode.ai/zen/go/v1/chat/completions' && kimiFallbackCall.proxy === undefined
-  && haikuCall?.proxy === 'http://192.168.122.1:17890' && kimiFallbackCall.body.messages?.[1]?.content.includes('Changed files and patches:')
-  && kimiFallbackCall.body.max_tokens === 65536 && kimiFallbackCall.body.max_output_tokens === undefined
-  && /-lane-B$/.test(kimiFallbackCall.headers['x-opencode-session'] || '') && r.logs.some((line) => line.includes('[Lane B/kimi-k2.7-code] egress=direct'))
-  && r.posted.some((body) => body.includes('lane-B') && body.includes('status=valid') && body.includes('served by kimi-k2.7-code')));
+// Kimi is Lane B's model here, with its own protocol inside the Anthropic Messages lane.
+const kimiLaneConfig = structuredClone(goModelsConfig);
+kimiLaneConfig.lanes[1].model = kimiModel;
+r = await scenario(healthy, { ...goModelsEnv, PR_REVIEW_CONFIG: JSON.stringify(kimiLaneConfig) });
+const kimiCall = byModel(r, 'kimi-k2.7-code')[0];
+check('a model with its own protocol keeps chat completions and its direct Go egress inside the lane',
+  kimiCall?.url === 'https://opencode.ai/zen/go/v1/chat/completions' && kimiCall.proxy === undefined
+  && haikuCall?.proxy === 'http://192.168.122.1:17890' && kimiCall.body.messages?.[1]?.content.includes('Changed files and patches:')
+  && kimiCall.body.max_tokens === 65536 && kimiCall.body.max_output_tokens === undefined
+  && /-lane-B$/.test(kimiCall.headers['x-opencode-session'] || '') && r.logs.some((line) => line.includes('[Lane B/kimi-k2.7-code] egress=direct'))
+  && r.posted.some((body) => body.includes('lane-B') && body.includes('status=valid') && body.includes('Lane B: kimi-k2.7-code · Thinking')));
 r = await scenario(healthy, goModelsEnv);
 const geminiCall = byModel(r, 'gemini-4-argon-contributor')[0];
 check('Gemini through Go streams from the inference endpoint with a session header and its thinking level',
@@ -1584,8 +1567,8 @@ check('a calibrated model is told to report plausible traced defects with medium
   && geminiCall.body.systemInstruction.parts[0].text.includes('Reporting calibration: surface every plausible defect you traced'));
 // Calibration is opt-in per model: Haiku already reports at this level and gained only noise.
 const uncalibratedConfig = structuredClone(goModelsConfig);
-for (const lane of uncalibratedConfig.lanes) for (const model of [lane.primary, ...lane.fallbacks]) delete model.reporting_calibration;
-uncalibratedConfig.lanes[1].primary.reporting_calibration = true;
+for (const lane of uncalibratedConfig.lanes) delete lane.model.reporting_calibration;
+uncalibratedConfig.lanes[1].model.reporting_calibration = true;
 r = await scenario(healthy, { ...goModelsEnv, PR_REVIEW_CONFIG: JSON.stringify(uncalibratedConfig) });
 check('reporting calibration follows the model flag across protocols',
   byModel(r, 'claude-haiku-5-5')[0]?.body.system.includes('Reporting calibration: surface every plausible defect you traced')
@@ -1599,8 +1582,9 @@ check('production Muse and GPT-6 Luna are calibrated while Haiku is not',
 const goQuota = Object.assign(new Error('SDK request failed (http=429).'), { name: 'SDKRequestError', status: 429, httpStatus: 429,
   unserved: true, providerType: 'GoUsageLimitError' });
 r = await scenario((call) => { if (call.model === 'gemini-4-argon-contributor') throw goQuota; return healthy(call); }, goModelsEnv);
-check('an exhausted Gemini allowance falls back to Hy3 once without resending Gemini', byModel(r, 'gemini-4-argon-contributor').length === 1
-  && byModel(r, 'hy3').length === 1 && r.posted.some((body) => body.includes('lane-C') && body.includes('status=valid') && body.includes('served by hy3')));
+check('an exhausted Gemini allowance is asked once, never resent, and reported as the spent plan', !r.error
+  && byModel(r, 'gemini-4-argon-contributor').length === 1
+  && r.posted.some((body) => body.includes('lane-C') && body.includes('status=diagnostic') && body.includes('the opencode-go plan quota is exhausted')));
 // Haiku and Gemini do not return thinking text, only thinking token counts; the comment
 // must still show that the model reasoned instead of "not reported".
 r = await scenario((call) => call.model === 'claude-haiku-5-5'
@@ -1629,12 +1613,12 @@ check('a Gemini answer without thought tokens is shown as zero thinking',
   r.posted.some((body) => body.includes('lane-C') && body.includes('Thinking: 0 tokens')));
 
 for (const [label, mutate, message] of [
-  ['a non-boolean reporting calibration', (config) => { config.lanes[1].primary.reporting_calibration = 'yes'; }, /primary\.reporting_calibration must be a boolean/],
-  ['an unknown model protocol', (config) => { config.lanes[1].fallbacks[0].protocol = 'grpc'; }, /fallbacks\[0\]\.protocol is not supported/],
-  ['effort outside Anthropic Messages', (config) => { config.lanes[1].fallbacks[0].effort = 'high'; }, /effort is only supported by anthropic-messages/],
-  ['an unknown effort', (config) => { config.lanes[1].primary.effort = 'extreme'; }, /primary\.effort is not supported/],
-  ['temperature on Anthropic Messages', (config) => { config.lanes[1].primary.temperature = 0.2; }, /temperature is not supported by anthropic-messages/],
-  ['thinking_level on a chat fallback inside a Gemini lane', (config) => { config.lanes[2].fallbacks[0].thinking_level = 'high'; }, /thinking_level is only supported by google-generate-content/],
+  ['a non-boolean reporting calibration', (config) => { config.lanes[1].model.reporting_calibration = 'yes'; }, /lanes\[1\]\.model\.reporting_calibration must be a boolean/],
+  ['an unknown model protocol', (config) => { config.lanes[1].model.protocol = 'grpc'; }, /lanes\[1\]\.model\.protocol is not supported/],
+  ['effort outside Anthropic Messages', (config) => { config.lanes[0].model.effort = 'high'; }, /effort is only supported by anthropic-messages/],
+  ['an unknown effort', (config) => { config.lanes[1].model.effort = 'extreme'; }, /lanes\[1\]\.model\.effort is not supported/],
+  ['temperature on Anthropic Messages', (config) => { config.lanes[1].model.temperature = 0.2; }, /temperature is not supported by anthropic-messages/],
+  ['thinking_level on a chat model inside a Gemini lane', (config) => { config.lanes[2].model.protocol = 'openai-chat-completions'; }, /thinking_level is only supported by google-generate-content/],
 ]) {
   const config = structuredClone(goModelsConfig);
   mutate(config);
@@ -1647,27 +1631,32 @@ delete missingPromptConfig.review_policy.system_prompt;
 r = await scenario(healthy, { PR_REVIEW_CONFIG: JSON.stringify(missingPromptConfig) });
 check('workflow defense rejects a missing system prompt before model calls', /system_prompt/.test(r.error?.message || '') && r.captured.length === 0);
 
-const missingFallbacksConfig = structuredClone(centralConfig);
-delete missingFallbacksConfig.lanes[0].fallbacks;
-r = await scenario(healthy, { PR_REVIEW_CONFIG: JSON.stringify(missingFallbacksConfig) });
-check('workflow defense rejects a missing fallback array before model calls', /fallbacks must be an array/.test(r.error?.message || '') && r.captured.length === 0);
+const missingRoutesConfig = structuredClone(centralConfig);
+delete missingRoutesConfig.lanes[0].routes;
+r = await scenario(healthy, { PR_REVIEW_CONFIG: JSON.stringify(missingRoutesConfig) });
+check('workflow defense rejects a missing routes list before model calls', /lanes\[0\]\.routes must list one to three providers/.test(r.error?.message || '') && r.captured.length === 0);
+// A stale schema-1 lane that still lists a fallback array fails instead of silently losing a model.
+const staleFallbacksConfig = structuredClone(centralConfig);
+staleFallbacksConfig.lanes[0].fallbacks = [];
+r = await scenario(healthy, { PR_REVIEW_CONFIG: JSON.stringify(staleFallbacksConfig) });
+check('workflow defense rejects a stale fallback array before model calls', /lanes\[0\]\.fallbacks was replaced by routes in schema 2/.test(r.error?.message || '') && r.captured.length === 0);
 
 const invalidThinkingConfig = structuredClone(centralConfig);
 invalidThinkingConfig.lanes[2].protocol = 'google-generate-content';
-delete invalidThinkingConfig.lanes[2].primary.omit_max_tokens;
-delete invalidThinkingConfig.lanes[2].primary.cross_provider;
-delete invalidThinkingConfig.lanes[2].primary.reasoning_effort;
-invalidThinkingConfig.lanes[2].primary.thinking_level = 'maximum';
+invalidThinkingConfig.lanes[2].routes = invalidThinkingConfig.lanes[2].routes.slice(0, 1);
+delete invalidThinkingConfig.lanes[2].model.omit_max_tokens;
+delete invalidThinkingConfig.lanes[2].model.reasoning_effort;
+invalidThinkingConfig.lanes[2].model.thinking_level = 'maximum';
 r = await scenario(healthy, { PR_REVIEW_CONFIG: JSON.stringify(invalidThinkingConfig) });
 check('workflow defense rejects an unsupported Google thinking level before model calls', /thinking_level is not supported/.test(r.error?.message || '') && r.captured.length === 0);
 
 const crossProtocolThinkingConfig = structuredClone(centralConfig);
-crossProtocolThinkingConfig.lanes[0].primary.thinking_level = 'high';
+crossProtocolThinkingConfig.lanes[0].model.thinking_level = 'high';
 r = await scenario(healthy, { PR_REVIEW_CONFIG: JSON.stringify(crossProtocolThinkingConfig) });
 check('workflow defense rejects thinking configuration outside Google protocol', /only supported by google-generate-content/.test(r.error?.message || '') && r.captured.length === 0);
 
 const invalidOmitMaxTokensConfig = structuredClone(centralConfig);
-invalidOmitMaxTokensConfig.lanes[2].primary.omit_max_tokens = 'yes';
+invalidOmitMaxTokensConfig.lanes[2].model.omit_max_tokens = 'yes';
 r = await scenario(healthy, { PR_REVIEW_CONFIG: JSON.stringify(invalidOmitMaxTokensConfig) });
 check('workflow defense rejects a non-boolean omit_max_tokens flag', /omit_max_tokens must be a boolean/.test(r.error?.message || '') && r.captured.length === 0);
 
@@ -1778,10 +1767,10 @@ for (const invalidAttempts of [undefined, 0, 2, 3, '1']) {
   r = await scenario(healthy, { PR_REVIEW_CONFIG: JSON.stringify(config) });
   check(`retry policy ${invalidAttempts} fails closed before dispatch`, r.captured.length === 0 && /max_attempts must be 1/.test(r.error?.message || ''));
 }
-const extraFallback = structuredClone(centralConfig);
-extraFallback.lanes[1].fallbacks.push(kimiFallback, { ...kimiFallback, id: 'third-model' });
-r = await scenario(healthy, { PR_REVIEW_CONFIG: JSON.stringify(extraFallback) });
-check('a third model cannot silently extend a lane', r.captured.length === 0 && /at most one fallback/.test(r.error?.message || ''));
+const extraRoutes = structuredClone(centralConfig);
+extraRoutes.lanes[1].routes.push({ provider: 'anthropic' }, { provider: 'openai' });
+r = await scenario(healthy, { PR_REVIEW_CONFIG: JSON.stringify(extraRoutes) });
+check('a fourth route cannot silently extend a lane', r.captured.length === 0 && /lanes\[1\]\.routes must list one to three providers/.test(r.error?.message || ''));
 
 // Make B slower, while C and A finish in that order. The final publication order
 // must reflect completion, not the fixed config order or allSettled barrier.
@@ -1809,18 +1798,18 @@ r = await scenario((call) => call.lane === 'B' && call.model === 'claude-haiku-5
 check('B primary gets fifteen minutes on each provider, while A and C keep their configured deadlines',
   !r.error && r.timeouts.join(',') === '600000,900000,900000,900000');
 const inheritedTimeoutConfig = structuredClone(centralConfig);
-delete inheritedTimeoutConfig.lanes[1].primary.request_timeout_ms;
+delete inheritedTimeoutConfig.lanes[1].model.request_timeout_ms;
 r = await scenario(healthy, { PR_REVIEW_CONFIG: JSON.stringify(inheritedTimeoutConfig) });
 check('models without an override still inherit their lane deadline',
   r.timeouts.join(',') === '600000,1800000,900000');
 const cappedTimeoutConfig = structuredClone(centralConfig);
-cappedTimeoutConfig.lanes[1].primary.request_timeout_ms = 3600000;
+cappedTimeoutConfig.lanes[1].model.request_timeout_ms = 3600000;
 r = await scenario(healthy, { PR_REVIEW_CONFIG: JSON.stringify(cappedTimeoutConfig) });
 check('a model override cannot extend the lane model-budget cap',
   r.timeouts.join(',') === '600000,1800000,900000');
 for (const invalid of [0, -1, 1.5, '300000', null]) {
   const config = structuredClone(centralConfig);
-  config.lanes[1].primary.request_timeout_ms = invalid;
+  config.lanes[1].model.request_timeout_ms = invalid;
   r = await scenario(healthy, { PR_REVIEW_CONFIG: JSON.stringify(config) });
   check(`invalid per-model timeout ${invalid} fails before dispatch`,
     r.captured.length === 0 && /request_timeout_ms must be a positive integer/.test(r.error?.message || ''));
@@ -1953,31 +1942,32 @@ r = await scenario((call) => call.lane === 'B' ? reply(402, '{"type":"error","er
   { ...twEgress, LANE_C_KEY: '', LANE_C_API_BASE: '' });
 check('NebulaLab: without the Lane C slot an exhausted credit says so', laneBBody(r).includes('Anthropic API credit balance is exhausted'));
 
-// Two Anthropic accounts share the one Lane B slot, one key per line (2026-10-23). A PR stays on
-// one account, chosen by its number and weighted 2:1 to the monthly budgets. A key that fails for
-// an account reason hands the same request to the other key before the lane crosses providers.
+// Two Anthropic accounts share the one Lane B slot, one key per line (2026-10-23). The keys are used
+// in order: every PR starts on key 1, and a key that fails for an account reason hands the same
+// request to the next key before the lane crosses providers.
 const twoKeys = { ...twEgress, LANE_B_KEY: 'anthropic-key-1\r\n\n  anthropic-key-2  \n' };
 const prNumbered = (number, extra = {}) => ({ pulls: [{ ...pull, number }],
   context: { ...context, payload: { pull_request: { number, head: { sha: headSha } } } }, ...extra });
 const keyOf = ({ headers }) => headers['x-api-key'] ?? headers.authorization?.replace(/^Bearer /, '');
 const laneBKeys = (result) => result.captured.filter(({ lane }) => lane === 'B').map((call) => `${call.model}@${keyOf(call)}`).join(',');
 const leaksKey = (result) => [...result.posted, ...result.statusUpdates, ...result.logs].some((text) => /anthropic-key-|go-key-/.test(text));
+const inOrderLog = (lane, number) => `[Lane ${lane}] the secret slot holds 2 keys, used in order; PR #${number} starts on the first one that has not failed.`;
 r = await scenario(healthy, twEgress);
 check('NebulaLab: a single-key slot names no key in the comment', !r.error && laneBBody(r).includes('Lane B: claude-sonnet-5-5 (first pass) · Thinking')
   && !laneBBody(r).includes('key 1/1'));
-for (const [number, key] of [[42, 1], [43, 1], [44, 2], [45, 1], [47, 2]]) {
+for (const number of [42, 43, 44, 45, 47]) {
   r = await scenario(healthy, twoKeys, prNumbered(number));
-  check(`NebulaLab: PR #${number} is reviewed with Anthropic key ${key} of 2 (weights 2:1)`, !r.error
-    && laneBKeys(r) === `claude-sonnet-5-5@anthropic-key-${key}` && laneBBody(r).includes(`Lane B: claude-sonnet-5-5 (first pass) · key ${key}/2 ·`)
-    && r.logs.some((line) => line.includes(`[Lane B] the secret slot holds 2 keys, weights 2:1; PR #${number} starts on key ${key}.`))
+  check(`NebulaLab: PR #${number} is reviewed with Anthropic key 1 of 2 (keys used in order)`, !r.error
+    && laneBKeys(r) === 'claude-sonnet-5-5@anthropic-key-1' && laneBBody(r).includes('Lane B: claude-sonnet-5-5 (first pass) · key 1/2 ·')
+    && r.logs.some((line) => line.includes(inOrderLog('B', number)))
     && !leaksKey(r));
 }
 r = await scenario(healthy, twoKeys, prNumbered(44));
-const keyTwoFirstPass = laneBBody(r);
+const keyOneFirstPass = laneBBody(r);
 r = await scenario(healthy, twoKeys, prNumbered(44, { ...commit(nextHead), pulls: [{ ...pull, number: 44, head: { ...pull.head, sha: nextHead } }],
-  context: { ...context, payload: { pull_request: { number: 44, head: { sha: nextHead } } } }, comments: [{ body: keyTwoFirstPass }] }));
-check('NebulaLab: later commits of a PR stay on its account', !r.error && laneBKeys(r) === 'claude-haiku-5-5@anthropic-key-2'
-  && laneBBody(r).includes('Lane B: claude-haiku-5-5 · key 2/2 ·'));
+  context: { ...context, payload: { pull_request: { number: 44, head: { sha: nextHead } } } }, comments: [{ body: keyOneFirstPass }] }));
+check('NebulaLab: later commits of a PR start on key 1 again', !r.error && laneBKeys(r) === 'claude-haiku-5-5@anthropic-key-1'
+  && laneBBody(r).includes('Lane B: claude-haiku-5-5 · key 1/2 ·'));
 
 const billing = () => reply(402, '{"type":"error","error":{"type":"billing_error","message":"insufficient credit"}}');
 for (const [label, failure, reason] of [
@@ -2017,34 +2007,40 @@ r = await scenario((call) => call.lane === 'B' ? billing() : healthy(call), { ..
 check('NebulaLab: with both keys out of credit and no Lane C slot the comment says every key is spent',
   laneBBody(r).includes('status=diagnostic') && laneBBody(r).includes('every key in the Lane B slot') && !leaksKey(r));
 // ci-central#73 review (C1): a refused key is not a spent credit, so the lane must not claim every key is out of credit.
-r = await scenario((call) => call.lane !== 'B' ? healthy(call) : keyOf(call) === 'anthropic-key-1'
+// Key 1 is out of credit and key 2 refused; Haiku then ends on key 1, the first key once every key failed.
+r = await scenario((call) => call.lane !== 'B' ? healthy(call) : keyOf(call) === 'anthropic-key-2'
   ? reply(401, '{"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}') : billing(),
 { ...twoKeys, LANE_C_KEY: '', LANE_C_API_BASE: '' }, prNumbered(44));
 check('NebulaLab: one key refused and one out of credit is not reported as every key out of credit',
-  laneBBody(r).includes('status=diagnostic') && laneBKeys(r).endsWith('claude-haiku-5-5@anthropic-key-2')
+  laneBBody(r).includes('status=diagnostic') && laneBKeys(r).endsWith('claude-haiku-5-5@anthropic-key-1')
   && laneBBody(r).includes('Anthropic API credit balance is exhausted') && !laneBBody(r).includes('every key in the Lane B slot'));
 
-// ci-central#73 review (C2/B5/A3): a cross-provider request uses the target slot's PR-number key, even
+// ci-central#73 review (C2/B5/A3): a cross-provider request uses the target slot's first key, even
 // after the target lane spent that key in the same run, so the account never depends on lane timing.
 r = await scenario((call) => call.lane === 'B' ? reply(503, '{"error":"overloaded"}')
   : call.lane === 'C' && call.model === 'gpt-6-luna' && keyOf(call) === 'lane-c-key-1'
     ? reply(401, '{"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}') : healthy(call),
 { ...twEgress, LANE_C_KEY: 'lane-c-key-1\nlane-c-key-2' });
-check('a cross-provider request uses the target slot key picked by PR number, not one the target lane skipped to', !r.error
+check('a cross-provider request uses the target slot\'s first key, not one the target lane skipped to', !r.error
   && r.captured.filter(({ lane, model }) => lane === 'C' && model === 'gpt-6-luna').map(keyOf).join(',') === 'lane-c-key-1,lane-c-key-2'
   && r.captured.find(({ lane, model }) => lane === 'C' && model === 'claude-haiku-5-5') && keyOf(r.captured.find(({ lane, model }) => lane === 'C' && model === 'claude-haiku-5-5')) === 'lane-c-key-1'
   && laneBBody(r).includes('status=valid'));
 
-// Without weights the keys share PRs equally, on any provider; a third key past the weights counts 1.
+// Keys are used in order on any provider: a plain Go slot starts every PR on key 1, and a third key
+// takes a request only after the two before it could not serve it for an account reason.
 const goTwoKeys = { LANE_B_KEY: 'go-key-1\ngo-key-2' };
-for (const [number, key] of [[42, 1], [43, 2]]) {
+for (const number of [42, 43]) {
   r = await scenario(healthy, goTwoKeys, prNumbered(number));
-  check(`unweighted keys: PR #${number} uses key ${key} of 2`, !r.error && laneBKeys(r) === `claude-haiku-5-5@go-key-${key}`
-    && r.logs.some((line) => line.includes(`weights 1:1; PR #${number} starts on key ${key}.`)) && !leaksKey(r));
+  check(`keys used in order: a plain Go slot starts PR #${number} on key 1`, !r.error && laneBKeys(r) === 'claude-haiku-5-5@go-key-1'
+    && r.logs.some((line) => line.includes(inOrderLog('B', number))) && !leaksKey(r));
 }
-r = await scenario(healthy, { ...twoKeys, LANE_B_KEY: 'anthropic-key-1\nanthropic-key-2\nanthropic-key-3' }, prNumbered(43));
-check('a key past the configured weights counts as weight 1', !r.error && laneBKeys(r) === 'claude-sonnet-5-5@anthropic-key-3'
-  && r.logs.some((line) => line.includes('weights 2:1:1; PR #43 starts on key 3.')));
+r = await scenario((call) => call.lane === 'B' && keyOf(call) !== 'anthropic-key-3' ? billing() : healthy(call),
+  { ...twoKeys, LANE_B_KEY: 'anthropic-key-1\nanthropic-key-2\nanthropic-key-3' }, prNumbered(43));
+check('a third key serves only after keys 1 and 2 could not, in that order', !r.error
+  && laneBKeys(r) === 'claude-sonnet-5-5@anthropic-key-1,claude-sonnet-5-5@anthropic-key-2,claude-sonnet-5-5@anthropic-key-3'
+  && laneBBody(r).includes('Lane B: claude-sonnet-5-5 (first pass) · key 3/3 ·')
+  && laneBBody(r).includes('> ℹ️ Lane B 的第 2 把 key 未能服务（API 余额已用完），本条 review 由同一模型经同一 Secret 槽位的第 3 把 key 生成。')
+  && !leaksKey(r));
 // ---------------------------------------------------------------------------------------------
 // Incremental re-review and repeat-review skipping (2026-10-19). On NebulaLab 68% of the runs that
 // reached a model re-reviewed a PR that already had a review, each sending the whole PR again.
@@ -2245,7 +2241,7 @@ r = await scenario(verdictA, {}, { ...linearRound(), ...manualAt(H2, '/review') 
 check('a plain manual /review is a full review on the current version even when the diff changed', !r.error && r.captured.length === 3
   && !r.captured.some(isIncremental) && r.logs.some((line) => line.includes('[Lane A] plan=full reason=manual')));
 const renamedModel = structuredClone(centralConfig);
-renamedModel.lanes[0].primary.id = 'muse-spark-1.4-contributor';
+renamedModel.lanes[0].model.id = 'muse-spark-1.4-contributor';
 r = await scenario(healthy, { PR_REVIEW_CONFIG: JSON.stringify(renamedModel) }, linearRound());
 check('a review made by a model the lane no longer runs is not a base for an incremental review', !r.error
   && !isIncremental(r.captured.find(({ lane }) => lane === 'A')) && isIncremental(r.captured.find(({ lane }) => lane === 'B'))
@@ -2410,7 +2406,7 @@ check('NebulaLab C: failed Sol tries Terra on OpenAI before Luna on Go', !r.erro
   && laneCCalls(r).map((call) => call.headers.authorization).join(',') === 'Bearer openai-test-key,Bearer openai-test-key,Bearer lane-a-key'
   && laneCBody(r).includes('GPT-6 Luna') && r.statusUpdates.at(-1).includes('gpt-6-luna via opencode-go'));
 const unnamedFallback = structuredClone(nebulaConfig);
-delete unnamedFallback.lanes[2].primary.cross_provider[0].label;
+delete unnamedFallback.lanes[2].routes[1].label;
 r = await scenario((call) => openaiUnavailable(call) ? reply(503, 'unavailable') : healthy(call), {
   ...openaiEgress, PR_REVIEW_CONFIG: JSON.stringify(unnamedFallback),
 });
@@ -2444,9 +2440,9 @@ check('NebulaLab: malformed C bundles disable C while A/B continue without expos
 
 const openaiChat = structuredClone(nebulaConfig);
 delete openaiChat.lanes[2].first_pass;
-delete openaiChat.lanes[2].primary.cross_provider;
-delete openaiChat.lanes[2].primary.reasoning_effort;
-openaiChat.lanes[2].primary.id = 'kimi-k2.7-code';
+openaiChat.lanes[2].routes = openaiChat.lanes[2].routes.slice(0, 1);
+delete openaiChat.lanes[2].model.reasoning_effort;
+openaiChat.lanes[2].model.id = 'kimi-k2.7-code';
 openaiChat.lanes[2].protocol = 'openai-chat-completions';
 r = await scenario(healthy, { ...openaiEgress, PR_REVIEW_CONFIG: JSON.stringify(openaiChat) });
 check('OpenAI cannot inherit a Go-only direct-egress exemption by sharing a model id', !r.error
@@ -2459,7 +2455,7 @@ check('self-hosted OpenAI without an approved proxy never sends a direct request
 r = await scenario((call) => openaiUnavailable(call) || lunaOnLaneAGo(call) ? reply(401, 'refused') : healthy(call), {
   ...openaiEgress, LANE_C_KEY: providerBundle({ openai: 'openai-one\nopenai-two', 'command-code': 'cc-one\ncc-two' }),
 });
-check('spent OpenAI account indices never change the CC profile PR-number key', !r.error
+check('spent OpenAI account indices never change the CC profile\'s first key', !r.error
   && laneCCalls(r).filter((call) => call.url.startsWith('https://lane-c.cc.')).length === 1
   && laneCCalls(r).find((call) => call.url.startsWith('https://lane-c.cc.')).headers.authorization === 'Bearer cc-one');
 
@@ -2473,7 +2469,7 @@ for (const number of [42, 43]) {
   r = await scenario(healthy, openaiTwoKeys, prNumbered(number));
   check(`NebulaLab C: PR #${number} starts on the first of two OpenAI keys used in order`, !r.error
     && laneCKeys(r) === 'gpt-6.2-sol@openai-one' && laneCBody(r).includes('· key 1/2 ·')
-    && r.logs.some((line) => line.includes(`[Lane C] the secret slot holds 2 keys, used in order; PR #${number} starts on key 1.`))
+    && r.logs.some((line) => line.includes(inOrderLog('C', number)))
     && !leaksOpenaiKey(r));
 }
 const openaiSpent = () => reply(429, '{"error":{"code":"insufficient_quota","type":"insufficient_quota","message":"You exceeded your current quota, please check your plan and billing details."}}');
@@ -2490,19 +2486,24 @@ r = await scenario((call) => call.url.startsWith('https://lane-c.openai.') && ca
   openaiTwoKeys, prNumbered(43));
 check('NebulaLab C: an OpenAI-side failure does not switch keys, and Terra follows on key 1', !r.error
   && laneCKeys(r) === 'gpt-6.2-sol@openai-one,gpt-6.1-terra@openai-one' && !laneCBody(r).includes('把 key 未能服务'));
-const sequentialGo = structuredClone(centralConfig);
-sequentialGo.lanes[1].key_order = 'sequential';
-r = await scenario(healthy, { ...goTwoKeys, PR_REVIEW_CONFIG: JSON.stringify(sequentialGo) }, prNumbered(43));
-check('keys used in order: a plain slot starts every PR on key 1', !r.error && laneBKeys(r) === 'claude-haiku-5-5@go-key-1'
-  && r.logs.some((line) => line.includes('[Lane B] the secret slot holds 2 keys, used in order; PR #43 starts on key 1.')));
+// Every slot now uses its keys in order, so a stale key_order or key_weights fails before dispatch
+// rather than being silently ignored.
+for (const [field, value] of [['key_order', 'sequential'], ['key_weights', [2, 1]]]) {
+  const staleKeysConfig = structuredClone(centralConfig);
+  staleKeysConfig.lanes[1][field] = value;
+  r = await scenario(healthy, { ...goTwoKeys, PR_REVIEW_CONFIG: JSON.stringify(staleKeysConfig) }, prNumbered(43));
+  check(`a stale ${field} is rejected as replaced by keys used in order in schema 2`, r.captured.length === 0
+    && new RegExp(`lanes\\[1\\]\\.${field} was replaced by keys used in order in schema 2`).test(r.error?.message || ''));
+}
 
 
 // The other repositories' last resort (the owner's decision, 2026-11-03). Only when the lane's own
 // plan and its cross route's plan both report a spent quota does Lane B ask Haiku 5.5 on the
-// Anthropic API and Lane C ask OpenAI (Sol for a PR's first pass, Luna after), through the second
-// provider of the lane's own slot. Lane A has none.
+// Anthropic API and Lane C ask OpenAI (Sol for a PR's first pass, Luna after): the lane's
+// plans_spent route, through the second provider of the lane's own slot. Lane A has none.
 const lastResortEnv = {
-  PR_REVIEW_CONFIG: JSON.stringify({ ...structuredClone(nebulaConfig), lanes: structuredClone(licenseConfig.lanes) }),
+  PR_REVIEW_CONFIG: JSON.stringify({ ...structuredClone(nebulaConfig), key_slots: structuredClone(licenseConfig.key_slots),
+    lanes: structuredClone(licenseConfig.lanes) }),
   LANE_B_KEY: providerBundle({ 'opencode-go': 'go-b-key', anthropic: 'anthropic-key-1\nanthropic-key-2' }),
   LANE_B_API_BASE: providerBundle({ 'opencode-go': 'https://lane-b.go.example.test/v1', anthropic: 'https://lane-b.anthropic.example.test/v1' }),
   LANE_C_KEY: providerBundle({ 'command-code': 'cc-test-key', openai: 'openai-test-key' }),
@@ -2579,8 +2580,9 @@ check('last resort: a spent Anthropic account hands Haiku to the other key of th
   && lastLaneComment(r, 'B').includes('status=valid') && lastLaneComment(r, 'B').includes('· key 2/2')
   && lastLaneComment(r, 'B').includes('第 1 把 key 未能服务'));
 r = await scenario(bothSpent, lastResortEnv, prNumbered(44));
-check('last resort: PRs split 2:1 between the two Anthropic accounts by number', !r.error
-  && keyOf(r.captured.find((call) => call.url.startsWith('https://lane-b.anthropic.'))) === 'anthropic-key-2');
+check('last resort: every PR starts on the first Anthropic account, keys used in order', !r.error
+  && r.captured.filter((call) => call.url.startsWith('https://lane-b.anthropic.')).map(keyOf).join(',') === 'anthropic-key-1'
+  && lastLaneComment(r, 'B').includes('· key 1/2'));
 
 r = await scenario(bothSpent, { ...lastResortEnv, RUNNER_ENVIRONMENT: 'self-hosted', NEBULA_REVIEW_PROXY_URL: 'http://192.168.122.1:17890' });
 check('last resort: a self-hosted runner sends Anthropic through the Taiwan egress and OpenAI through the review proxy', !r.error

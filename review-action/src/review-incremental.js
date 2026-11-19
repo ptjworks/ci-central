@@ -214,7 +214,7 @@ function collectReplies({ pull, since, comments = [], reviews = [], reviewCommen
 // contract, by a model the lane still runs.
 // A record the lane can build on: written under the same report contract by a model the lane still runs.
 function trustedState(lane, state, promptVersion) {
-  const models = [lane.first_pass, lane.primary, ...(lane.fallbacks || []), lane.last_resort?.first_pass, lane.last_resort?.primary]
+  const models = [lane.first_pass, lane.model, ...(lane.routes || []).flatMap((route) => [route.first_pass, route.model])]
     .filter(Boolean).map((model) => model.id);
   return Boolean(state) && state.prompt === promptVersion && models.includes(state.model);
 }
