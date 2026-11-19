@@ -1833,7 +1833,8 @@ check('NebulaLab: the first review of a PR runs Sonnet 5.5 through the Taiwan eg
   && laneBCalls(r) === 'claude-sonnet-5-5'
   && sonnetCall?.url === 'https://lane-b.example.test/v1/messages' && sonnetCall.headers['x-api-key'] === 'lane-b-key'
   && sonnetCall.proxy === 'http://192.168.122.1:17890' && sonnetCall.headers['x-opencode-session'] === undefined
-  && sonnetCall.body.output_config?.effort === 'high' && sonnetCall.body.max_tokens === 120000 && sonnetCall.body.thinking?.type === 'adaptive'
+  && sonnetCall.body.output_config?.effort === 'xhigh' && sonnetCall.body.max_tokens === 120000 && sonnetCall.body.thinking?.type === 'adaptive'
+  && sonnetCall.body.system.includes('Reporting calibration:')
   && r.logs.some((line) => line.includes('[Lane B/claude-sonnet-5-5] egress=tw-proxy'))
   && r.logs.some((line) => line.includes('[Lane B] this PR has no first-pass review yet'))
   && firstPassBody.includes('status=valid') && firstPassBody.includes('· Claude Sonnet 5.5 · 首审')
@@ -1847,6 +1848,8 @@ const followUpBody = laneBBody(r);
 check('NebulaLab: later commits go to Haiku 5.5 and keep the first review folded in the same comment', !r.error
   && laneBCalls(r) === 'claude-haiku-5-5'
   && r.captured.find(({ model }) => model === 'claude-haiku-5-5')?.proxy === 'http://192.168.122.1:17890'
+  && r.captured.find(({ model }) => model === 'claude-haiku-5-5')?.body.output_config?.effort === 'high'
+  && !r.captured.find(({ model }) => model === 'claude-haiku-5-5')?.body.system.includes('Reporting calibration:')
   && r.comments.filter(({ body }) => body.startsWith('<!-- ai-pr-review-bot:lane-B -->\n')).length === 1
   && followUpBody.includes(`head=${nextHead}`) && followUpBody.includes('## AI PR Review · Lane B · Claude Haiku 5.5\n')
   && followUpBody.includes(`<details><summary>首审 · Claude Sonnet 5.5 · 提交 ${headSha.slice(0, 7)}</summary>`)

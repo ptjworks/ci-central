@@ -60,7 +60,8 @@
         "request_timeout_ms": 900000,
         "context_profile": "full",
         "max_output_tokens": 120000,
-        "effort": "high",
+        "effort": "xhigh",
+        "reporting_calibration": true,
         "diff_char_budget": 1200000
       },
       "model": {

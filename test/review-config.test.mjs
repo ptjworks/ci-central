@@ -233,9 +233,13 @@ assert.equal(nebula.lanes[0].model.context_profile, 'full');
 // Sonnet 5.5 found real defects Haiku missed and none of Haiku's false P1s on NebulaLab
 // #1133/#1237/#1241 (2026-10-15), at 0.4x Haiku's output. A first review sees a median 97% of
 // the final diff, so it runs once per PR and Haiku reviews the later commits.
+// On six replayed first commits where production Sonnet at high had reported nothing (2026-11-19,
+// inputs matching production to 20 tokens), high stayed silent on 10 of 12 runs; xhigh alone found
+// 3 real issues, calibration alone 1 real among 12 findings, and xhigh with calibration 11 real
+// (10 fixed later) among 21, in at most 386 s.
 assert.deepEqual(nebula.lanes[1].first_pass, {
   id: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5', request_timeout_ms: 900000, context_profile: 'full',
-  max_output_tokens: 120000, effort: 'high', diff_char_budget: 1200000,
+  max_output_tokens: 120000, effort: 'xhigh', reporting_calibration: true, diff_char_budget: 1200000,
 }, 'NebulaLab Lane B first pass changed without a measurement behind it');
 assert.equal(nebula.lanes[1].model.reporting_calibration, undefined, 'Haiku stays uncalibrated');
 

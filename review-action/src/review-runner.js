@@ -250,6 +250,8 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
   // calibrated it reported 4 and 1. Muse went from 2/2 to 5/4 findings on #1237/#1133 and
   // 3 on #1241. Both stayed at 0 on a clean change and 5/5 on the hard task. Haiku already
   // reports at this level and only gained clean-change noise, so it stays uncalibrated.
+  // NebulaLab's Sonnet first pass needs it together with xhigh: on six replayed first commits,
+  // calibration alone at high added mostly noise (1 real of 12), with xhigh it found 11 real issues.
   const reportingCalibration = 'Reporting calibration: surface every plausible defect you traced, not only the ones you are certain of. When your analysis finds a changed code path that could plausibly fail, regress, leak data, bypass a guard or break a cross-file contract (for example an unvalidated fallback value, a missing or misplaced check, an unhandled error path, or inconsistent assumptions between files), report it as a finding with an exact code quote and confidence medium or low, instead of dismissing it or moving it to limitations. Keep limitations for items that have no concrete code evidence. An empty findings list is correct only when you traced the changed paths and found no plausible defect. A missed defect costs more than a medium-confidence finding that a reviewer later rejects; do not invent defects that the code does not support.';
 
   const calibrated = (model, text) => model.reporting_calibration ? `${text}\n\n${reportingCalibration}` : text;
