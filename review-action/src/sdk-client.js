@@ -401,9 +401,11 @@ return async function requestChatCompletion({ apiKey, baseURL, payload, signal, 
         if (slowStream) {
           slowCheck = setTimeout(() => {
             if (timing.finish_reason) return;
-            const charsPerSecond = Math.round((timing.reasoning_chars + timing.content_chars) * 1000 / slowStream.afterMs);
+            // The time actually measured: a busy event loop may fire the timer late.
+            const measuredMs = Math.max(slowStream.afterMs, Date.now() - started - timing.first_event_ms);
+            const charsPerSecond = Math.round((timing.reasoning_chars + timing.content_chars) * 1000 / measuredMs);
             if (charsPerSecond >= slowStream.minCharsPerSecond) return;
-            slow = { chars_per_second: charsPerSecond, after_ms: slowStream.afterMs };
+            slow = { chars_per_second: charsPerSecond, after_ms: measuredMs };
             local.abort();
           }, slowStream.afterMs);
           slowCheck.unref?.();

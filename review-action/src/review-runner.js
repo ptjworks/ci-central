@@ -650,7 +650,7 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
   // One served request per model and route. No retry, backoff, optional-field repair, or
   // redirect can silently send the same review again. The one exception is the caller's: a first
   // route with slow_resend stops a slow stream and sends it once more (see requestReview).
-  async function callModel(lane, model, { windowMs = modelWindowMs(lane, model), sessionSuffix = '', attempt = 1, route, slowStream } = {}) {
+  async function callModel(lane, model, { windowMs = modelWindowMs(lane, model), sessionSuffix = '', attempt = 1, route, slowStream, spentMs = 0 } = {}) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), windowMs);
     const startedAt = Date.now();
@@ -745,9 +745,9 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
       const code = error?.cause?.code || error?.code;
       errorCode = typeof code === 'string' && /^[a-zA-Z0-9_.-]{1,80}$/.test(code) ? code : '';
       localDeadline = error?.name === 'AbortError';
-      slowChars = error?.code === 'REVIEW_SLOW_STREAM' && Number.isSafeInteger(error.charsPerSecond) ? error.charsPerSecond : null;
+      slowChars = slowStream && error?.code === 'REVIEW_SLOW_STREAM' && Number.isSafeInteger(error.charsPerSecond) ? error.charsPerSecond : null;
       requestError = localDeadline
-        ? `Local review deadline reached after ${Math.round(windowMs / 1000)} s before a complete final response; this is not proof of an upstream outage.`
+        ? `Local review deadline reached after ${Math.round((spentMs + windowMs) / 1000)} s before a complete final response; this is not proof of an upstream outage.`
         : (error?.message || String(error));
       unserved = error?.unserved === true;
       httpStatus = Number.isInteger(error?.status) ? error.status : error?.httpStatus;
@@ -939,7 +939,7 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
         : lastOutcome ? { key: `${provider}:incomplete`, text: `${provider} 的输出不完整` }
           : lastClosedStream ? { key: `${provider}:closed`, text: `${provider} 的流在 ${lastClosedStream.seconds} 秒后被关闭` }
             : outcome.localDeadline ? { key: `${provider}:deadline`, text: resend
-              ? `${provider} 输出过慢，重发一次后仍未在 ${seconds(resend.spentMs + outcome.windowMs)} 秒内写完`
+              ? `${provider} 输出过慢，重发一次后仍未在 ${seconds(resend.totalMs)} 秒内写完`
               : `${provider} 未在 ${seconds(outcome.windowMs)} 秒内写完` }
               : outcome.slowChars !== null ? { key: `${provider}:slow`, text: `${provider} 输出过慢，剩余时间不够重发` }
                 : outcome.failureKind === 'authentication-failed' ? { key: `${provider}:auth`, text: `${provider} 的 key 被拒绝` }
@@ -978,7 +978,9 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
         // The lane's first route may stop a stream that is too slow and send it once more (the
         // owner's decision, 2026-11-19): on Go a request lands on a fast or a slow backend at random.
         const checkSlow = !via && !stage.lastResort && !resend && slowResendsLeft > 0;
-        const outcome = await callModel(lane, model, { route, ...(resend ? { windowMs: resend.windowMs } : {}),
+        // A resend gets what is left of the first request's window, counted to the same end time.
+        const resendWindowMs = resend ? Math.max(1, resend.endsAt - Date.now()) : undefined;
+        const outcome = await callModel(lane, model, { route, ...(resend ? { windowMs: resendWindowMs, spentMs: resend.totalMs - resendWindowMs } : {}),
           ...(checkSlow ? { slowStream: { afterMs: first.slow_resend.after_ms, minCharsPerSecond: first.slow_resend.min_chars_per_second } } : {}) });
         const attemptLabel = via ? `${model.id} via ${via.provider} ${via.modelId}`
           : stage.lastResort ? `${model.id} on ${route.provider} (last resort${servedKey ? `, key ${key + 1}/${stage.keyCount}` : ''})`
@@ -1057,13 +1059,13 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
           tried.push(`${attemptLabel} -> ${slowText} (${attempts ?? 0} attempt(s))`);
           console.log(`[Lane ${lane.id}/${model.id}] ${route.provider} streamed ${outcome.slowChars} chars/s over the first ${Math.round(first.slow_resend.after_ms / 1000)} s, below ${first.slow_resend.min_chars_per_second}; sending the same request once more to ${route.provider} with the remaining ${Math.round(remainingMs / 1000)} s.`);
           await statusPublisher.update(lane.id, 'slow_resend', `${model.id} @ ${route.provider}`);
-          steps.push({ key, resend: { windowMs: remainingMs, spentMs: outcome.elapsedMs, slow: { charsPerSecond: outcome.slowChars, provider: route.provider } } });
+          steps.push({ key, resend: { endsAt: Date.now() + remainingMs, totalMs: outcome.windowMs, slow: { charsPerSecond: outcome.slowChars, provider: route.provider } } });
           continue;
         }
         if (!quotaNote) onlyQuota = false;
         const failed = lastClosedStream
           ? `HTTP ${lastClosedStream.httpStatus}, stream closed before the model finished after ${lastClosedStream.seconds} s`
-          : outcome.localDeadline ? `local deadline reached after ${Math.round(outcome.windowMs / 1000)} s before the model finished${resend ? ' (resent after a slow stream)' : ''}`
+          : outcome.localDeadline ? `local deadline reached after ${Math.round((resend ? resend.totalMs : outcome.windowMs) / 1000)} s before the model finished${resend ? ' (both requests together; resent after a slow stream)' : ''}`
             : slowText || `HTTP ${response?.status ?? 'request failed'}${quotaNote ? `, ${quotaNote.tried}` : ''}`;
         tried.push(`${attemptLabel} -> ${lastFailureKind === 'report-invalid' ? `evidence contract rejected: ${lastReportError}` : lastOutcome || failed} (${attempts ?? 0} attempt(s))`);
         noteRoute(route.provider, outcome, quotaNote && { key: quotaKey, text: quotaNote.status }, resend);

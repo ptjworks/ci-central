@@ -2647,7 +2647,9 @@ check('slow stream: a resend that also runs out of time goes on to Command Code,
   && lastLaneComment(r, 'C').includes('status=diagnostic')
   && lastLaneComment(r, 'C').includes('minimax-m3.1-flash -> stream too slow (210 chars/s over the first 60 s), stopped after')
   && lastLaneComment(r, 'C').includes('local deadline reached after')
-  && lastLaneComment(r, 'C').includes('(resent after a slow stream)')
+  && lastLaneComment(r, 'C').includes('local deadline reached after 600 s before the model finished (both requests together; resent after a slow stream)')
+  && r.logs.some((line) => line.includes('provider=opencode-go protocol=openai-chat-completions failed: Local review deadline reached after 600 s before a complete final response'))
+  && r.captured.filter(onCc).every((call) => call.slowStream === undefined)
   && r.statusUpdates.at(-1).includes('| C | minimax-m3.1-flash | 审核未生成（opencode-go 输出过慢，重发一次后仍未在 600 秒内写完；command-code API 余额已用完） |'));
 
 // resume-form-assistant-plugin #539 (2026-11-19): MiniMax on a slow Go backend ran out of time, and
@@ -2656,6 +2658,8 @@ r = await scenario(goMiniMaxSequence([() => Promise.reject(deadlineError())], (c
 check('a Go deadline followed by Command Code\'s spent credit names both in the status table', !r.error
   && laneRoutes(r, 'C') === 'minimax-m3.1-flash@lane-a.example,minimax/minimax-m3.1-flash@lane-c.cc'
   && lastLaneComment(r, 'C').includes('minimax-m3.1-flash -> local deadline reached after 600 s before the model finished (1 attempt(s))')
+  // The check stays on the Go route: a deadline there leaves the resend unused, and the next route gets none.
+  && r.captured.filter(miniMaxOnGo).length === 1 && r.captured.filter(onCc).length === 1 && r.captured.filter(onCc).every((call) => call.slowStream === undefined)
   && r.statusUpdates.at(-1).includes('| C | minimax-m3.1-flash | 审核未生成（opencode-go 未在 600 秒内写完；command-code API 余额已用完） |'));
 
 // No other route has the check: NebulaLab's lanes and the shared policy configs never send one.
