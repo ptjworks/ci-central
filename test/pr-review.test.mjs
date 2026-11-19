@@ -1822,6 +1822,8 @@ const twEgress = { PR_REVIEW_CONFIG: JSON.stringify(legacyNebulaConfig), RUNNER_
 const laneBCalls = (result) => result.captured.filter(({ lane }) => lane === 'B').map(({ model }) => model).join(',');
 const laneBBody = (result) => result.posted.filter((body) => body.includes('lane=B')).at(-1) || '';
 const firstPassMark = (head) => `<!-- ai-pr-review-first-pass:v1 lane=B head=${head} model=claude-sonnet-5-5 -->`;
+// A distinctive clause of the runner's calibration text, so a renamed or truncated text fails the checks.
+const calibrationClause = 'A missed defect costs more than a medium-confidence finding that a reviewer later rejects';
 // A later commit that rewrites most of the PR, so it gets a full review rather than being skipped as
 // unchanged or reviewed incrementally; those two paths have their own checks further down.
 const commit = (sha, size = 200) => ({ pulls: [{ ...pull, head: { ...pull.head, sha } }], files: [patch('src/a.ts', size), patch('tests/a.test.ts', 100)],
@@ -1834,7 +1836,7 @@ check('NebulaLab: the first review of a PR runs Sonnet 5.5 through the Taiwan eg
   && sonnetCall?.url === 'https://lane-b.example.test/v1/messages' && sonnetCall.headers['x-api-key'] === 'lane-b-key'
   && sonnetCall.proxy === 'http://192.168.122.1:17890' && sonnetCall.headers['x-opencode-session'] === undefined
   && sonnetCall.body.output_config?.effort === 'xhigh' && sonnetCall.body.max_tokens === 120000 && sonnetCall.body.thinking?.type === 'adaptive'
-  && sonnetCall.body.system.includes('Reporting calibration:')
+  && sonnetCall.body.system.includes(calibrationClause)
   && r.logs.some((line) => line.includes('[Lane B/claude-sonnet-5-5] egress=tw-proxy'))
   && r.logs.some((line) => line.includes('[Lane B] this PR has no first-pass review yet'))
   && firstPassBody.includes('status=valid') && firstPassBody.includes('· Claude Sonnet 5.5 · 首审')
@@ -1848,8 +1850,8 @@ const followUpBody = laneBBody(r);
 check('NebulaLab: later commits go to Haiku 5.5 and keep the first review folded in the same comment', !r.error
   && laneBCalls(r) === 'claude-haiku-5-5'
   && r.captured.find(({ model }) => model === 'claude-haiku-5-5')?.proxy === 'http://192.168.122.1:17890'
-  && r.captured.find(({ model }) => model === 'claude-haiku-5-5')?.body.output_config?.effort === 'high'
-  && !r.captured.find(({ model }) => model === 'claude-haiku-5-5')?.body.system.includes('Reporting calibration:')
+  && r.captured.filter(({ model }) => model === 'claude-haiku-5-5').every(({ body }) =>
+    body.output_config?.effort === 'high' && !body.system.includes('Reporting calibration:') && !body.system.includes(calibrationClause))
   && r.comments.filter(({ body }) => body.startsWith('<!-- ai-pr-review-bot:lane-B -->\n')).length === 1
   && followUpBody.includes(`head=${nextHead}`) && followUpBody.includes('## AI PR Review · Lane B · Claude Haiku 5.5\n')
   && followUpBody.includes(`<details><summary>首审 · Claude Sonnet 5.5 · 提交 ${headSha.slice(0, 7)}</summary>`)
