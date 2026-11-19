@@ -2633,6 +2633,9 @@ const slowServed = r.captured.filter(miniMaxOnGo);
 check('slow stream: a slow first MiniMax stream on Go is sent once more to Go, without a second check, and serves', !r.error
   && laneRoutes(r, 'C') === 'minimax-m3.1-flash@lane-a.example,minimax-m3.1-flash@lane-a.example'
   && slowServed.length === 2 && JSON.stringify(slowServed[0].slowStream) === JSON.stringify(slowCheck) && slowServed[1].slowStream === undefined
+  // A fresh session for the resend, so a gateway that keeps a session on one backend draws again.
+  && /-lane-C$/.test(slowServed[0].headers['x-opencode-session'] || '')
+  && slowServed[1].headers['x-opencode-session'] === `${slowServed[0].headers['x-opencode-session']}-resend`
   && !r.captured.some(onCc) && !r.captured.some(onPaidApi)
   && lastLaneComment(r, 'C').includes('status=valid')
   && lastLaneComment(r, 'C').includes('第一次请求在 `opencode-go` 上输出过慢（210 字符/秒），已中止；本条 review 来自同一模型在同一供应商上的一次重发。')
@@ -2651,6 +2654,12 @@ check('slow stream: a resend that also runs out of time goes on to Command Code,
   && r.logs.some((line) => line.includes('provider=opencode-go protocol=openai-chat-completions failed: Local review deadline reached after 600 s before a complete final response'))
   && r.captured.filter(onCc).every((call) => call.slowStream === undefined)
   && r.statusUpdates.at(-1).includes('| C | minimax-m3.1-flash | 审核未生成（opencode-go 输出过慢，重发一次后仍未在 600 秒内写完；command-code API 余额已用完） |'));
+
+r = await scenario(goMiniMaxSequence([() => Promise.reject(slowError()), () => reply(503, '{"error":"unavailable"}')], (call) => onCc(call) ? ccSpent() : healthy(call)), slowEnv);
+check('slow stream: a resend that fails for another reason keeps the slow first stream in the status table', !r.error
+  && laneRoutes(r, 'C') === 'minimax-m3.1-flash@lane-a.example,minimax-m3.1-flash@lane-a.example,minimax/minimax-m3.1-flash@lane-c.cc'
+  && lastLaneComment(r, 'C').includes('minimax-m3.1-flash -> HTTP 503 (1 attempt(s))')
+  && r.statusUpdates.at(-1).includes('| C | minimax-m3.1-flash | 审核未生成（opencode-go 输出过慢已重发一次，重发结果：HTTP 503；command-code API 余额已用完） |'));
 
 // resume-form-assistant-plugin #539 (2026-11-19): MiniMax on a slow Go backend ran out of time, and
 // the table named only Command Code's spent credit. Every route's reason is now in the row.

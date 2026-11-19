@@ -944,8 +944,13 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
               : outcome.slowChars !== null ? { key: `${provider}:slow`, text: `${provider} 输出过慢，剩余时间不够重发` }
                 : outcome.failureKind === 'authentication-failed' ? { key: `${provider}:auth`, text: `${provider} 的 key 被拒绝` }
                   : outcome.failureKind === 'endpoint-unavailable' ? { key: `${provider}:endpoint`, text: `${provider} 连接失败` }
-                    : { key: `${provider}:http`, text: `${provider} HTTP ${outcome.httpStatus ?? '请求失败'}` });
-      if (!routeNotes.some((existing) => existing.key === note.key)) routeNotes.push(note);
+                    : { key: `${provider}:http`, text: `${provider} HTTP ${Number.isInteger(outcome.httpStatus) ? outcome.httpStatus : '请求失败'}` });
+      // A resend that failed for another reason keeps the slow first stream in front of it.
+      const reason = resend && note.key !== `${provider}:deadline` ? {
+        key: `${note.key}:resent`,
+        text: `${provider} 输出过慢已重发一次，重发结果：${note.text.startsWith(provider) ? note.text.slice(provider.length).replace(/^\s*的?\s*/, '') : note.text}`,
+      } : note;
+      if (!routeNotes.some((existing) => existing.key === reason.key)) routeNotes.push(reason);
     }
     // One model on one stage: the stage provider's first key this lane has not seen fail, each later
     // key of that slot after an account failure, then, for the lane's model on its first route, the
@@ -977,10 +982,14 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
         finalStage = stage;
         // The lane's first route may stop a stream that is too slow and send it once more (the
         // owner's decision, 2026-11-19): on Go a request lands on a fast or a slow backend at random.
+        // Only the first route gets here: later routes come as `via`, the paid one as a last resort.
+        // A later key of the first route is checked too when the key before it never streamed.
         const checkSlow = !via && !stage.lastResort && !resend && slowResendsLeft > 0;
-        // A resend gets what is left of the first request's window, counted to the same end time.
+        // A resend gets what is left of the first request's window, counted to the same end time,
+        // under a fresh session so a gateway that keeps a session on one backend draws again.
         const resendWindowMs = resend ? Math.max(1, resend.endsAt - Date.now()) : undefined;
-        const outcome = await callModel(lane, model, { route, ...(resend ? { windowMs: resendWindowMs, spentMs: resend.totalMs - resendWindowMs } : {}),
+        const outcome = await callModel(lane, model, { route,
+          ...(resend ? { windowMs: resendWindowMs, spentMs: resend.totalMs - resendWindowMs, sessionSuffix: '-resend' } : {}),
           ...(checkSlow ? { slowStream: { afterMs: first.slow_resend.after_ms, minCharsPerSecond: first.slow_resend.min_chars_per_second } } : {}) });
         const attemptLabel = via ? `${model.id} via ${via.provider} ${via.modelId}`
           : stage.lastResort ? `${model.id} on ${route.provider} (last resort${servedKey ? `, key ${key + 1}/${stage.keyCount}` : ''})`
@@ -1055,11 +1064,13 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
           ? `stream too slow (${outcome.slowChars} chars/s over the first ${Math.round(first.slow_resend.after_ms / 1000)} s), stopped after ${Math.round(outcome.elapsedMs / 1000)} s` : '';
         const remainingMs = outcome.windowMs - outcome.elapsedMs;
         if (checkSlow && outcome.slowChars !== null && remainingMs >= MIN_RESEND_WINDOW_MS) {
+          // Fixed before the status update, which waits on GitHub and must not lengthen the window.
+          const endsAt = Date.now() + remainingMs;
           slowResendsLeft -= 1;
           tried.push(`${attemptLabel} -> ${slowText} (${attempts ?? 0} attempt(s))`);
           console.log(`[Lane ${lane.id}/${model.id}] ${route.provider} streamed ${outcome.slowChars} chars/s over the first ${Math.round(first.slow_resend.after_ms / 1000)} s, below ${first.slow_resend.min_chars_per_second}; sending the same request once more to ${route.provider} with the remaining ${Math.round(remainingMs / 1000)} s.`);
           await statusPublisher.update(lane.id, 'slow_resend', `${model.id} @ ${route.provider}`);
-          steps.push({ key, resend: { endsAt: Date.now() + remainingMs, totalMs: outcome.windowMs, slow: { charsPerSecond: outcome.slowChars, provider: route.provider } } });
+          steps.push({ key, resend: { endsAt, totalMs: outcome.windowMs, slow: { charsPerSecond: outcome.slowChars, provider: route.provider } } });
           continue;
         }
         if (!quotaNote) onlyQuota = false;

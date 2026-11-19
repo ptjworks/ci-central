@@ -2173,8 +2173,12 @@ ${requestError || ""}`;
     const routeNotes = [];
     function noteRoute(provider, outcome, quota, resend) {
       const seconds = (ms) => Math.round(ms / 1e3);
-      const note = quota ?? (lastFailureKind === "report-invalid" ? { key: `${provider}:contract`, text: `${provider} \u7684\u62A5\u544A\u672A\u901A\u8FC7\u8BC1\u636E\u6821\u9A8C` } : lastOutcome ? { key: `${provider}:incomplete`, text: `${provider} \u7684\u8F93\u51FA\u4E0D\u5B8C\u6574` } : lastClosedStream ? { key: `${provider}:closed`, text: `${provider} \u7684\u6D41\u5728 ${lastClosedStream.seconds} \u79D2\u540E\u88AB\u5173\u95ED` } : outcome.localDeadline ? { key: `${provider}:deadline`, text: resend ? `${provider} \u8F93\u51FA\u8FC7\u6162\uFF0C\u91CD\u53D1\u4E00\u6B21\u540E\u4ECD\u672A\u5728 ${seconds(resend.totalMs)} \u79D2\u5185\u5199\u5B8C` : `${provider} \u672A\u5728 ${seconds(outcome.windowMs)} \u79D2\u5185\u5199\u5B8C` } : outcome.slowChars !== null ? { key: `${provider}:slow`, text: `${provider} \u8F93\u51FA\u8FC7\u6162\uFF0C\u5269\u4F59\u65F6\u95F4\u4E0D\u591F\u91CD\u53D1` } : outcome.failureKind === "authentication-failed" ? { key: `${provider}:auth`, text: `${provider} \u7684 key \u88AB\u62D2\u7EDD` } : outcome.failureKind === "endpoint-unavailable" ? { key: `${provider}:endpoint`, text: `${provider} \u8FDE\u63A5\u5931\u8D25` } : { key: `${provider}:http`, text: `${provider} HTTP ${outcome.httpStatus ?? "\u8BF7\u6C42\u5931\u8D25"}` });
-      if (!routeNotes.some((existing) => existing.key === note.key)) routeNotes.push(note);
+      const note = quota ?? (lastFailureKind === "report-invalid" ? { key: `${provider}:contract`, text: `${provider} \u7684\u62A5\u544A\u672A\u901A\u8FC7\u8BC1\u636E\u6821\u9A8C` } : lastOutcome ? { key: `${provider}:incomplete`, text: `${provider} \u7684\u8F93\u51FA\u4E0D\u5B8C\u6574` } : lastClosedStream ? { key: `${provider}:closed`, text: `${provider} \u7684\u6D41\u5728 ${lastClosedStream.seconds} \u79D2\u540E\u88AB\u5173\u95ED` } : outcome.localDeadline ? { key: `${provider}:deadline`, text: resend ? `${provider} \u8F93\u51FA\u8FC7\u6162\uFF0C\u91CD\u53D1\u4E00\u6B21\u540E\u4ECD\u672A\u5728 ${seconds(resend.totalMs)} \u79D2\u5185\u5199\u5B8C` : `${provider} \u672A\u5728 ${seconds(outcome.windowMs)} \u79D2\u5185\u5199\u5B8C` } : outcome.slowChars !== null ? { key: `${provider}:slow`, text: `${provider} \u8F93\u51FA\u8FC7\u6162\uFF0C\u5269\u4F59\u65F6\u95F4\u4E0D\u591F\u91CD\u53D1` } : outcome.failureKind === "authentication-failed" ? { key: `${provider}:auth`, text: `${provider} \u7684 key \u88AB\u62D2\u7EDD` } : outcome.failureKind === "endpoint-unavailable" ? { key: `${provider}:endpoint`, text: `${provider} \u8FDE\u63A5\u5931\u8D25` } : { key: `${provider}:http`, text: `${provider} HTTP ${Number.isInteger(outcome.httpStatus) ? outcome.httpStatus : "\u8BF7\u6C42\u5931\u8D25"}` });
+      const reason = resend && note.key !== `${provider}:deadline` ? {
+        key: `${note.key}:resent`,
+        text: `${provider} \u8F93\u51FA\u8FC7\u6162\u5DF2\u91CD\u53D1\u4E00\u6B21\uFF0C\u91CD\u53D1\u7ED3\u679C\uFF1A${note.text.startsWith(provider) ? note.text.slice(provider.length).replace(/^\s*的?\s*/, "") : note.text}`
+      } : note;
+      if (!routeNotes.some((existing) => existing.key === reason.key)) routeNotes.push(reason);
     }
     async function attemptModel(model2, stage) {
       const supplied = contextFor(model2, lane.id).pack;
@@ -2204,7 +2208,7 @@ ${requestError || ""}`;
         const resendWindowMs = resend ? Math.max(1, resend.endsAt - Date.now()) : void 0;
         const outcome = await callModel(lane, model2, {
           route,
-          ...resend ? { windowMs: resendWindowMs, spentMs: resend.totalMs - resendWindowMs } : {},
+          ...resend ? { windowMs: resendWindowMs, spentMs: resend.totalMs - resendWindowMs, sessionSuffix: "-resend" } : {},
           ...checkSlow ? { slowStream: { afterMs: first.slow_resend.after_ms, minCharsPerSecond: first.slow_resend.min_chars_per_second } } : {}
         });
         const attemptLabel = via ? `${model2.id} via ${via.provider} ${via.modelId}` : stage.lastResort ? `${model2.id} on ${route.provider} (last resort${servedKey ? `, key ${key + 1}/${stage.keyCount}` : ""})` : servedKey ? `${model2.id} (key ${key + 1}/${stage.keyCount})` : model2.id;
@@ -2270,11 +2274,12 @@ ${requestError || ""}`;
         const slowText = outcome.slowChars !== null ? `stream too slow (${outcome.slowChars} chars/s over the first ${Math.round(first.slow_resend.after_ms / 1e3)} s), stopped after ${Math.round(outcome.elapsedMs / 1e3)} s` : "";
         const remainingMs = outcome.windowMs - outcome.elapsedMs;
         if (checkSlow && outcome.slowChars !== null && remainingMs >= MIN_RESEND_WINDOW_MS) {
+          const endsAt = Date.now() + remainingMs;
           slowResendsLeft -= 1;
           tried.push(`${attemptLabel} -> ${slowText} (${attempts ?? 0} attempt(s))`);
           console.log(`[Lane ${lane.id}/${model2.id}] ${route.provider} streamed ${outcome.slowChars} chars/s over the first ${Math.round(first.slow_resend.after_ms / 1e3)} s, below ${first.slow_resend.min_chars_per_second}; sending the same request once more to ${route.provider} with the remaining ${Math.round(remainingMs / 1e3)} s.`);
           await statusPublisher.update(lane.id, "slow_resend", `${model2.id} @ ${route.provider}`);
-          steps.push({ key, resend: { endsAt: Date.now() + remainingMs, totalMs: outcome.windowMs, slow: { charsPerSecond: outcome.slowChars, provider: route.provider } } });
+          steps.push({ key, resend: { endsAt, totalMs: outcome.windowMs, slow: { charsPerSecond: outcome.slowChars, provider: route.provider } } });
           continue;
         }
         if (!quotaNote) onlyQuota = false;

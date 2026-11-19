@@ -403,9 +403,10 @@ return async function requestChatCompletion({ apiKey, baseURL, payload, signal, 
             if (timing.finish_reason) return;
             // The time actually measured: a busy event loop may fire the timer late.
             const measuredMs = Math.max(slowStream.afterMs, Date.now() - started - timing.first_event_ms);
-            const charsPerSecond = Math.round((timing.reasoning_chars + timing.content_chars) * 1000 / measuredMs);
-            if (charsPerSecond >= slowStream.minCharsPerSecond) return;
-            slow = { chars_per_second: charsPerSecond, after_ms: measuredMs };
+            // Compared unrounded: 349.6 chars/s is below a floor of 350; the logs show it rounded.
+            const rate = (timing.reasoning_chars + timing.content_chars) * 1000 / measuredMs;
+            if (rate >= slowStream.minCharsPerSecond) return;
+            slow = { chars_per_second: Math.floor(rate), after_ms: measuredMs };
             local.abort();
           }, slowStream.afterMs);
           slowCheck.unref?.();
