@@ -50,7 +50,7 @@ for (const repository of repositories) {
   assert.equal(fromSource.review_policy.max_attempts, 1);
   assert.deepEqual(fromBundle, fromSource, `${repository} source and dist loaders disagree`);
   assert.deepEqual(fromSource.lanes.map((lane) => lane.id), ['A', 'B', 'C']);
-  const cModel = onAnthropic ? 'gpt-6.1-terra' : 'minimax-m3.1-flash';
+  const cModel = onAnthropic ? 'gpt-6.1-terra' : 'deepseek-v4.1-flash';
   assert.deepEqual(fromSource.lanes.map((lane) => lane.model.id), ['muse-spark-1.3-contributor', 'claude-haiku-5-5', cModel]);
   // Which providers each fixed slot holds. A slot with two is a version-1 bundle. NebulaLab keeps
   // one Go key, its Anthropic accounts and an OpenAI + Command Code bundle; the others keep a Go key,
@@ -62,9 +62,11 @@ for (const repository of repositories) {
   // 2026-10-18): when a provider yields no usable review, for any reason, the next one gets the
   // same request. Outside NebulaLab, Lanes B and C end with a paid API asked only when both plans
   // report a spent quota (2026-11-03): Haiku on Anthropic, and on OpenAI GPT-6.1 Sol for a PR's
-  // first pass and GPT-6 Luna at xhigh after. Their Lane C runs MiniMax M3.1 Flash on Go first
-  // (2026-11-18), with Go's key from the Lane A slot. NebulaLab reviews on both APIs first; its
-  // Lane C falls back to GPT-6 Luna, labelled, on Go and Command Code.
+  // first pass and GPT-6 Luna at xhigh after. Their Lane C runs DeepSeek V4.1 Flash on Go first
+  // (2026-11-20, after MiniMax M3.1 Flash from 2026-11-18), with Go's key from the Lane A slot.
+  // NebulaLab reviews on both APIs first; its Lane C falls back to GPT-6 Luna, labelled, on Go and
+  // Command Code. No live lane sets slow_resend: DeepSeek's first-minute rate (71-704 chars/s) did not
+  // predict its finish (100 chars/s at 60 s, then done in 701 s at 174 tokens/s; 2026-11-19 bench).
   assert.deepEqual(fromSource.lanes.map((lane) => lane.routes), onAnthropic ? [
     [{ provider: 'opencode-go' }, { provider: 'command-code', id: 'meta/muse-spark-1.3-contributor' }],
     [{ provider: 'anthropic' }, { provider: 'opencode-go' }, { provider: 'command-code' }],
@@ -73,24 +75,25 @@ for (const repository of repositories) {
   ] : [
     [{ provider: 'opencode-go' }, { provider: 'command-code', id: 'meta/muse-spark-1.3-contributor' }],
     [{ provider: 'opencode-go' }, { provider: 'command-code' }, { provider: 'anthropic', when: 'plans_spent' }],
-    [{ provider: 'opencode-go' }, { provider: 'command-code', id: 'minimax/minimax-m3.1-flash' }, { provider: 'openai', when: 'plans_spent', model: LUNA, first_pass: SOL }],
+    [{ provider: 'opencode-go' }, { provider: 'command-code', id: 'deepseek/deepseek-v4.1-flash' },
+      { provider: 'openai', when: 'plans_spent', model: LUNA, first_pass: SOL }],
   ], `${repository} lane routes changed`);
   // Go serves GPT-6 Luna only over Responses (Chat Completions returns 400 ModelProtocolUnsupported)
-  // and MiniMax M3.1 Flash only over Chat Completions; every route reuses the model's protocol.
+  // and DeepSeek V4.1 Flash is benchmarked over Chat Completions; every route reuses the model's protocol.
   assert.deepEqual(fromSource.lanes.map((lane) => lane.model.protocol ?? lane.protocol),
     ['openai-responses', 'anthropic-messages', onAnthropic ? 'openai-responses' : 'openai-chat-completions'], `${repository} lane protocols changed`);
-  // MiniMax thought for up to 56,177 tokens and wrote up to 57,913 on ci-central #86 (2026-11-18), close
-  // to the 65,536 GPT-6 Luna keeps; it accepts up to 512K, so it gets 131,072.
-  assert.equal(fromSource.lanes[2].model.max_output_tokens, onAnthropic ? 65536 : 131072);
+  // DeepSeek V4.1 Flash at high wrote up to 122,004 tokens (nearly all thinking) on ci-central #86
+  // (2026-11-19 bench, under a 131,072 cap); it accepts up to 384K, so it gets 196,608.
+  assert.equal(fromSource.lanes[2].model.max_output_tokens, onAnthropic ? 65536 : 196608);
   assert.deepEqual(fromSource.lanes.map((lane) => lane.first_pass?.id ?? null), [null, onAnthropic ? 'claude-sonnet-5-5' : null, onAnthropic ? 'gpt-6.2-sol' : null],
     `${repository} only NebulaLab's Lanes B/C have first passes`);
   // Haiku at max effort spent all 65,536 output tokens thinking on three large NebulaLab PRs; high finished them.
   assert.equal(fromSource.lanes[1].model.effort, 'high', `${repository} Haiku must stay at high effort`);
   // Muse runs at xhigh everywhere (NebulaLab since 2026-11-18).
   assert.equal(fromSource.lanes[0].model.reasoning_effort, 'xhigh', `${repository} Muse effort must follow its review policy`);
-  // MiniMax thinks deepest with no effort sent: explicit high and xhigh thought less and found
-  // fewer seeded defects (2/5, 3/5 against 4/5), and max matched the default (2026-11-18).
-  assert.equal(fromSource.lanes[2].model.reasoning_effort, onAnthropic ? 'high' : undefined,
+  // DeepSeek V4.1 Flash takes low, high or max on Go. High found 4 of 5 known real defects on ci-central
+  // PRs and the cross-file tenant leak; max ran past 900 s on 5 of 7 large PRs (2026-11-19).
+  assert.equal(fromSource.lanes[2].model.reasoning_effort, 'high',
     `${repository} Lane C effort must follow its review policy`);
   // Calibration took Muse and Hy3 from near-silent to 1-5 findings on large NebulaLab PRs with no
   // high-confidence clean-change noise; on Haiku it only added noise. GPT-6 Luna took over Lane C
@@ -133,12 +136,12 @@ for (const repository of repositories) {
   assert.equal(config.lanes[1].model.max_output_tokens, 120000, `${repository} Lane B must preserve the Haiku output ceiling`);
   assert.equal(config.lanes[1].request_timeout_ms, 1800000, `${repository} Lane B preserves reasoning with a thirty-minute request ceiling`);
   assert.equal(config.lanes[1].model_budget_ms, 1800000, `${repository} Lane B model budget matches its request ceiling`);
-  // Measured 2026-10-19: GPT-6 Luna finished three large NebulaLab PRs on Go in 68-107 s. On
-  // 2026-11-18 MiniMax M3.1 Flash took 166-609 s on four ci-central PRs. Lane C keeps fifteen
-  // minutes on each provider.
+  // Measured 2026-10-19: GPT-6 Luna finished three large NebulaLab PRs on Go in 68-107 s. DeepSeek
+  // V4.1 Flash at high finished 3 of 7 large ci-central PR runs within 600 s and 6 of 7 within 900 s
+  // (2026-11-19 bench), so every Lane C keeps fifteen minutes; the job waits for every lane.
   assert.equal(config.lanes[2].request_timeout_ms, 900000, `${repository} Lane C request budget changed without a measurement behind it`);
-  assert.equal(config.lanes[2].model_budget_ms, 900000, `${repository} Lane C model cap is fifteen minutes`);
-  assert.equal(config.lanes[2].model.request_timeout_ms, undefined, `${repository} Lane C's model inherits the lane's fifteen-minute window`);
+  assert.equal(config.lanes[2].model_budget_ms, 900000, `${repository} Lane C model cap changed`);
+  assert.equal(config.lanes[2].model.request_timeout_ms, undefined, `${repository} Lane C's model inherits the lane's window`);
   // Measured 2026-10-14: Haiku finished 71-226K-token NebulaLab PRs in 146-211 s.
   assert.equal(config.lanes[1].model.request_timeout_ms, 900000, `${repository} Lane B Haiku uses a fifteen-minute window`);
   if (anthropicLaneB.has(repository)) {
@@ -183,12 +186,12 @@ const inputTokenRoom = {
   'gpt-6.1-sol': 1000000,
   'gpt-6.1-terra': 1050000,
   'gpt-6.2-sol': 1050000,
-  // MiniMax M3.1 Flash: a 1M-token context on Go and on Command Code (recorded 2026-11-18).
-  'minimax-m3.1-flash': 1000000,
-  'minimax/minimax-m3.1-flash': 1000000,
+  // DeepSeek V4.1 Flash: a 1M-token context on Go and on Command Code (recorded 2026-11-20).
+  'deepseek-v4.1-flash': 1000000,
+  'deepseek/deepseek-v4.1-flash': 1000000,
 };
 const sharesWindowWithOutput = new Set(['claude-haiku-5-5', 'claude-sonnet-5-5', 'gpt-6-luna', 'gpt-6.1-sol', 'gpt-6.1-terra', 'gpt-6.2-sol',
-  'minimax-m3.1-flash', 'minimax/minimax-m3.1-flash']);
+  'deepseek-v4.1-flash', 'deepseek/deepseek-v4.1-flash']);
 for (const repository of repositories) {
   const config = source.loadConfig(repository, actionPath);
   const policy = config.review_policy;
@@ -275,6 +278,34 @@ for (const loader of [source, bundled]) {
     const config = structuredClone(nebula);
     mutate(config);
     assert.throws(() => loader.validateConfig(config, 'TshyGO/NebulaLab'), message);
+  }
+}
+
+// The slow-stream resend (2026-11-19) is the one resend on a lane's own provider: only a first route
+// on Go may set it, with exactly its two bounded integers. No live lane sets it since Lane C moved to
+// DeepSeek (2026-11-20); the check runs on the live config with the MiniMax-era setting added back.
+for (const loader of [source, bundled]) {
+  const valid = { after_ms: 60000, min_chars_per_second: 350 };
+  const live = source.loadConfig('ptjworks/resume-form-assistant-plugin', actionPath);
+  assert.equal(live.lanes.flatMap((lane) => lane.routes).filter((route) => route.slow_resend).length, 0);
+  live.lanes[2].routes[0].slow_resend = valid;
+  loader.validateConfig(structuredClone(live), 'ptjworks/resume-form-assistant-plugin');
+  for (const [mutate, message] of [
+    [(config) => { config.lanes[2].routes[1].slow_resend = valid; }, /routes\[1\] may only set provider, id, label/],
+    [(config) => { config.lanes[1].routes[2].slow_resend = valid; }, /routes\[2\] may only set provider, when, model, first_pass/],
+    [(config) => { config.lanes[2].routes[0].provider = 'command-code'; config.lanes[2].routes[1].provider = 'opencode-go'; delete config.lanes[2].routes[1].id; },
+      /routes\[0\]\.slow_resend is allowed only on an opencode-go first route/],
+    [(config) => { config.lanes[2].routes[0].slow_resend = { after_ms: 60000 }; }, /slow_resend must set exactly after_ms and min_chars_per_second/],
+    [(config) => { config.lanes[2].routes[0].slow_resend = { ...valid, retries: 2 }; }, /slow_resend must set exactly after_ms and min_chars_per_second/],
+    [(config) => { config.lanes[2].routes[0].slow_resend = [valid]; }, /slow_resend must set exactly after_ms and min_chars_per_second/],
+    [(config) => { config.lanes[2].routes[0].slow_resend = { ...valid, after_ms: 5000 }; }, /slow_resend\.after_ms must be an integer from 10000 to 300000/],
+    [(config) => { config.lanes[2].routes[0].slow_resend = { ...valid, after_ms: '60000' }; }, /slow_resend\.after_ms must be an integer from 10000 to 300000/],
+    [(config) => { config.lanes[2].routes[0].slow_resend = { ...valid, min_chars_per_second: 0 }; }, /slow_resend\.min_chars_per_second must be an integer from 1 to 100000/],
+    [(config) => { config.lanes[2].routes[0].slow_resend = { ...valid, min_chars_per_second: 350.5 }; }, /slow_resend\.min_chars_per_second must be an integer from 1 to 100000/],
+  ]) {
+    const config = structuredClone(live);
+    mutate(config);
+    assert.throws(() => loader.validateConfig(config, 'ptjworks/resume-form-assistant-plugin'), message);
   }
 }
 
@@ -391,7 +422,9 @@ for (const loader of [source, bundled]) {
     [(config) => { config.lanes[1].routes[2].id = 'claude-haiku-5-5'; }, /routes\[2\] may only set provider, when, model, first_pass/],
     [(config) => { config.lanes[2].routes[2].first_pass.id = 'gpt-6-luna'; }, /first_pass must name a model other than the model it leads/],
     [(config) => { config.lanes[2].routes[2].first_pass.effort = 'high'; }, /routes\[2\]\.first_pass\.effort is only supported by anthropic-messages/],
-    [(config) => { config.lanes[1].routes[2].model = { ...config.lanes[1].model, reasoning_effort: 'high' }; }, /routes\[2\]\.model\.reasoning_effort requires openai-responses/],
+    [(config) => { config.lanes[1].routes[2].model = { ...config.lanes[1].model, reasoning_effort: 'high' }; }, /routes\[2\]\.model\.reasoning_effort requires openai-responses or openai-chat-completions/],
+    // Lane C's Chat Completions model takes an effort (DeepSeek, 2026-11-20), but only a known one.
+    [(config) => { config.lanes[2].model.reasoning_effort = 'extreme'; }, /lanes\[2\]\.model\.reasoning_effort requires openai-responses or openai-chat-completions and a supported effort/],
     [(config) => { config.lanes[2].routes[2].model.max_output_tokens = 0; }, /routes\[2\]\.model\.max_output_tokens must be a positive integer/],
     // ci-central#86 review: a paid model must speak its paid API's protocol, not the plan lane's.
     [(config) => { config.key_slots.B = ['opencode-go', 'openai']; config.lanes[1].routes[2].provider = 'openai'; }, /must use a protocol openai serves/],

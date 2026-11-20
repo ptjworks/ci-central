@@ -84,10 +84,11 @@
       "request_timeout_ms": 900000,
       "model_budget_ms": 900000,
       "model": {
-        "id": "minimax-m3.1-flash",
-        "label": "MiniMax M3.1 Flash",
+        "id": "deepseek-v4.1-flash",
+        "label": "DeepSeek V4.1 Flash",
+        "reasoning_effort": "high",
         "context_profile": "full",
-        "max_output_tokens": 131072,
+        "max_output_tokens": 196608,
         "reporting_calibration": true
       },
       "routes": [
@@ -96,7 +97,7 @@
         },
         {
           "provider": "command-code",
-          "id": "minimax/minimax-m3.1-flash"
+          "id": "deepseek/deepseek-v4.1-flash"
         },
         {
           "provider": "openai",

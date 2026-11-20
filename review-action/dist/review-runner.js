@@ -77,8 +77,8 @@ var require_index = __commonJS({
     }
     function validateModelOptions(config, lane, model, location) {
       const protocol = model.protocol ?? lane.protocol;
-      if (model.reasoning_effort !== void 0 && (protocol !== "openai-responses" || !["none", "low", "medium", "high", "xhigh", "max"].includes(model.reasoning_effort))) {
-        throw new Error(`${location}.reasoning_effort requires openai-responses and a supported effort.`);
+      if (model.reasoning_effort !== void 0 && (!["openai-responses", "openai-chat-completions"].includes(protocol) || !["none", "low", "medium", "high", "xhigh", "max"].includes(model.reasoning_effort))) {
+        throw new Error(`${location}.reasoning_effort requires openai-responses or openai-chat-completions and a supported effort.`);
       }
       if (model.omit_max_tokens && protocol !== "openai-chat-completions") {
         throw new Error(`${location}.omit_max_tokens is only supported by openai-chat-completions.`);
@@ -114,6 +114,19 @@ var require_index = __commonJS({
         }
       }
     }
+    function validateSlowResend(route, at) {
+      const slow = route.slow_resend;
+      if (route.provider !== "opencode-go") throw new Error(`${at}.slow_resend is allowed only on an opencode-go first route.`);
+      if (!slow || typeof slow !== "object" || Array.isArray(slow) || Object.keys(slow).sort().join(",") !== "after_ms,min_chars_per_second") {
+        throw new Error(`${at}.slow_resend must set exactly after_ms and min_chars_per_second.`);
+      }
+      if (!Number.isSafeInteger(slow.after_ms) || slow.after_ms < 1e4 || slow.after_ms > 3e5) {
+        throw new Error(`${at}.slow_resend.after_ms must be an integer from 10000 to 300000.`);
+      }
+      if (!Number.isSafeInteger(slow.min_chars_per_second) || slow.min_chars_per_second < 1 || slow.min_chars_per_second > 1e5) {
+        throw new Error(`${at}.slow_resend.min_chars_per_second must be an integer from 1 to 100000.`);
+      }
+    }
     function validateRoutes(config, lane, location) {
       const routes = lane.routes;
       if (!Array.isArray(routes) || routes.length < 1 || routes.length > 3) throw new Error(`${location}.routes must list one to three providers.`);
@@ -122,11 +135,12 @@ var require_index = __commonJS({
         const at = `${location}.routes[${index}]`;
         if (!route || typeof route !== "object" || Array.isArray(route)) throw new Error(`${at} must be an object.`);
         const gated = route.when !== void 0;
-        const allowed = gated ? ["provider", "when", "model", "first_pass"] : index === 0 ? ["provider"] : ["provider", "id", "label"];
+        const allowed = gated ? ["provider", "when", "model", "first_pass"] : index === 0 ? ["provider", "slow_resend"] : ["provider", "id", "label"];
         if (Object.keys(route).some((key) => !allowed.includes(key))) {
           throw new Error(`${at} may only set ${allowed.join(", ")}.`);
         }
         if (typeof route.provider !== "string" || !route.provider.trim()) throw new Error(`${at}.provider must be non-empty.`);
+        if (route.slow_resend !== void 0) validateSlowResend(route, at);
         if (!keySlotFor2(config, lane.id, route.provider)) throw new Error(`${at}.provider ${route.provider} is not in any key slot.`);
         for (const field of ["id", "label"]) {
           if (route[field] !== void 0 && (typeof route[field] !== "string" || !route[field].trim())) {
@@ -915,6 +929,7 @@ var require_review_status = __commonJS({
       cross: "\u672C\u4F9B\u5E94\u5546\u672A\u4EA7\u751F\u53EF\u7528\u5BA1\u6838\uFF0C\u540C\u6A21\u578B\u7ECF\u53E6\u4E00\u4F9B\u5E94\u5546\u8FD0\u884C\u4E2D",
       cross_model: "\u672C\u4F9B\u5E94\u5546\u672A\u4EA7\u751F\u53EF\u7528\u5BA1\u6838\uFF0C\u53E6\u4E00\u4F9B\u5E94\u5546\u7684\u515C\u5E95\u6A21\u578B\u8FD0\u884C\u4E2D",
       account: "key \u672A\u80FD\u670D\u52A1\uFF0C\u540C\u6A21\u578B\u6362\u540C\u4E00 Secret \u69FD\u4F4D\u7684\u4E0B\u4E00\u628A key \u8FD0\u884C\u4E2D",
+      slow_resend: "\u9996\u6B21\u8BF7\u6C42\u8F93\u51FA\u8FC7\u6162\u5DF2\u4E2D\u6B62\uFF0C\u540C\u6A21\u578B\u5728\u540C\u4E00\u4F9B\u5E94\u5546\u91CD\u53D1\u4E2D",
       last_resort: "\u4E24\u5BB6\u5957\u9910\u989D\u5EA6\u90FD\u5DF2\u7528\u5B8C\uFF0C\u6700\u540E\u515C\u5E95\u8FD0\u884C\u4E2D",
       quota: "\u4F9B\u5E94\u5546\u989D\u5EA6\u7528\u5C3D\uFF0C\u5BA1\u6838\u672A\u751F\u6210",
       unchanged: "\u590D\u7528\u6B64\u524D\u63D0\u4EA4\u7684\u6709\u6548\u8BC1\u636E\uFF0C\u672A\u8BF7\u6C42\u6A21\u578B",
@@ -1307,7 +1322,8 @@ var {
   sinceLines,
   INCREMENTAL_SHARE_LIMIT
 } = require_review_incremental();
-var DIRECT_GO_MODELS = /* @__PURE__ */ new Set(["kimi-k2.7-code", "glm-5.3", "hy3", "minimax-m3.1-flash"]);
+var DIRECT_GO_MODELS = /* @__PURE__ */ new Set(["kimi-k2.7-code", "glm-5.3", "hy3", "minimax-m3.1-flash", "deepseek-v4.1-flash"]);
+var MIN_RESEND_WINDOW_MS = 6e4;
 var QUOTA_WINDOWS = { "5h": ["5-hour", "5 \u5C0F\u65F6"], weekly: ["weekly", "\u5468"], monthly: ["monthly", "\u6708"], daily: ["daily", "\u65E5"] };
 function reportedQuota(error) {
   if (error?.quotaExhausted !== true) return null;
@@ -1851,7 +1867,8 @@ ${googleDeepReviewContract}`), model.review_lane_id, laneMode(model));
     if (protocol === "openai-responses") return responsesPayload(scoped);
     if (protocol === "anthropic-messages") return anthropicPayload(scoped);
     if (protocol === "google-generate-content") return { model: model.id, ...googlePayload(scoped) };
-    return basePayload(scoped);
+    const chat = basePayload(scoped);
+    return scoped.reasoning_effort ? { ...chat, reasoning_effort: scoped.reasoning_effort } : chat;
   }
   function classifyFailure(response, responseText, requestError, provider, quota) {
     const status = response?.status;
@@ -1882,7 +1899,7 @@ ${requestError || ""}`;
     if (!credentials?.apiKey || !credentials?.baseUrl) return null;
     return { provider: route.provider, credentialLane, modelId: route.id ?? model.id, label: route.label, keyIndex };
   }
-  async function callModel(lane, model, { windowMs = modelWindowMs(lane, model), sessionSuffix = "", attempt = 1, route } = {}) {
+  async function callModel(lane, model, { windowMs = modelWindowMs(lane, model), sessionSuffix = "", attempt = 1, route, slowStream, spentMs = 0 } = {}) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), windowMs);
     const startedAt = Date.now();
@@ -1894,6 +1911,7 @@ ${requestError || ""}`;
     let httpStatus;
     let retryAfterMs;
     let localDeadline = false;
+    let slowChars = null;
     let quota = null;
     try {
       const credentials = credentialsFor(route.credentialLane, route.provider);
@@ -1953,6 +1971,7 @@ ${requestError || ""}`;
         payload: sdkPayload(lane, route.modelId === model.id ? model : { ...model, id: route.modelId }),
         signal: controller.signal,
         timeoutMs: windowMs,
+        ...slowStream ? { slowStream } : {},
         onProgress: (progress) => console.log(`[Lane ${lane.id}/${route.modelId}] sdk=${JSON.stringify(progress)}`)
       });
       responseText = await response.text();
@@ -1968,7 +1987,8 @@ ${requestError || ""}`;
       const code = error?.cause?.code || error?.code;
       errorCode = typeof code === "string" && /^[a-zA-Z0-9_.-]{1,80}$/.test(code) ? code : "";
       localDeadline = error?.name === "AbortError";
-      requestError = localDeadline ? "Local review deadline reached before a complete final response; this is not proof of an upstream outage." : error?.message || String(error);
+      slowChars = slowStream && error?.code === "REVIEW_SLOW_STREAM" && Number.isSafeInteger(error.charsPerSecond) ? error.charsPerSecond : null;
+      requestError = localDeadline ? `Local review deadline reached after ${Math.round((spentMs + windowMs) / 1e3)} s before a complete final response; this is not proof of an upstream outage.` : error?.message || String(error);
       unserved = error?.unserved === true;
       httpStatus = Number.isInteger(error?.status) ? error.status : error?.httpStatus;
       retryAfterMs = Number.isSafeInteger(error?.retryAfterMs) ? error.retryAfterMs : void 0;
@@ -1998,7 +2018,9 @@ ${requestError || ""}`;
       localDeadline,
       elapsedMs,
       errorCode,
-      quota: usable ? null : quota
+      quota: usable ? null : quota,
+      windowMs,
+      slowChars: usable ? null : slowChars
     };
   }
   function laterRoute(lane, model, route) {
@@ -2148,6 +2170,17 @@ ${requestError || ""}`;
     let onlyQuota = true;
     const quotaProviders = /* @__PURE__ */ new Set();
     let finalStage = null;
+    let slowResendsLeft = first.slow_resend ? 1 : 0;
+    const routeNotes = [];
+    function noteRoute(provider, outcome, quota, resend) {
+      const seconds = (ms) => Math.round(ms / 1e3);
+      const note = quota ?? (lastFailureKind === "report-invalid" ? { key: `${provider}:contract`, text: `${provider} \u7684\u62A5\u544A\u672A\u901A\u8FC7\u8BC1\u636E\u6821\u9A8C` } : lastOutcome ? { key: `${provider}:incomplete`, text: `${provider} \u7684\u8F93\u51FA\u4E0D\u5B8C\u6574` } : lastClosedStream ? { key: `${provider}:closed`, text: `${provider} \u7684\u6D41\u5728 ${lastClosedStream.seconds} \u79D2\u540E\u88AB\u5173\u95ED` } : outcome.localDeadline ? { key: `${provider}:deadline`, text: resend ? `${provider} \u8F93\u51FA\u8FC7\u6162\uFF0C\u91CD\u53D1\u4E00\u6B21\u540E\u4ECD\u672A\u5728 ${seconds(resend.totalMs)} \u79D2\u5185\u5199\u5B8C` : `${provider} \u672A\u5728 ${seconds(outcome.windowMs)} \u79D2\u5185\u5199\u5B8C` } : outcome.slowChars !== null ? { key: `${provider}:slow`, text: `${provider} \u8F93\u51FA\u8FC7\u6162\uFF0C\u5269\u4F59\u65F6\u95F4\u4E0D\u591F\u91CD\u53D1` } : outcome.failureKind === "authentication-failed" ? { key: `${provider}:auth`, text: `${provider} \u7684 key \u88AB\u62D2\u7EDD` } : outcome.failureKind === "endpoint-unavailable" ? { key: `${provider}:endpoint`, text: `${provider} \u8FDE\u63A5\u5931\u8D25` } : { key: `${provider}:http`, text: `${provider} HTTP ${Number.isInteger(outcome.httpStatus) ? outcome.httpStatus : "\u8BF7\u6C42\u5931\u8D25"}` });
+      const reason = resend && note.key !== `${provider}:deadline` ? {
+        key: `${note.key}:resent`,
+        text: `${provider} \u8F93\u51FA\u8FC7\u6162\u5DF2\u91CD\u53D1\u4E00\u6B21\uFF0C\u91CD\u53D1\u7ED3\u679C\uFF1A${note.text.startsWith(provider) ? note.text.slice(provider.length).replace(/^\s*的?\s*/, "") : note.text}`
+      } : note;
+      if (!routeNotes.some((existing) => existing.key === reason.key)) routeNotes.push(reason);
+    }
     async function attemptModel(model2, stage) {
       const supplied = contextFor(model2, lane.id).pack;
       if (!supplied.coverage.some((file) => file.patch_available && file.supplied_hunks)) {
@@ -2159,7 +2192,7 @@ ${requestError || ""}`;
       const crosses = stage.crosses && model2 === lane.model;
       const steps = stage.available ? [{ key: stage.startKey() }] : crosses ? later.map((route) => ({ cross: route })) : [];
       const keysTried = /* @__PURE__ */ new Set();
-      for (const { cross, key, from } of steps) {
+      for (const { cross, key, from, resend } of steps) {
         const via = cross ? laterRoute(lane, model2, cross) : null;
         if (cross && !via) continue;
         if (via) {
@@ -2172,7 +2205,13 @@ ${requestError || ""}`;
         const servedVia = via ?? (stage.lastResort ? { ...route, lastResort: true } : null);
         if (!via) keysTried.add(key);
         finalStage = stage;
-        const outcome = await callModel(lane, model2, { route });
+        const checkSlow = !via && !stage.lastResort && !resend && slowResendsLeft > 0;
+        const resendWindowMs = resend ? Math.max(1, resend.endsAt - Date.now()) : void 0;
+        const outcome = await callModel(lane, model2, {
+          route,
+          ...resend ? { windowMs: resendWindowMs, spentMs: resend.totalMs - resendWindowMs, sessionSuffix: "-resend" } : {},
+          ...checkSlow ? { slowStream: { afterMs: first.slow_resend.after_ms, minCharsPerSecond: first.slow_resend.min_chars_per_second } } : {}
+        });
         const attemptLabel = via ? `${model2.id} via ${via.provider} ${via.modelId}` : stage.lastResort ? `${model2.id} on ${route.provider} (last resort${servedKey ? `, key ${key + 1}/${stage.keyCount}` : ""})` : servedKey ? `${model2.id} (key ${key + 1}/${stage.keyCount})` : model2.id;
         const { response, responseText, requestError, attempts, failureKind } = outcome;
         lastClosedStream = outcome.errorCode === "REVIEW_INCOMPLETE_STREAM" ? { httpStatus: outcome.httpStatus ?? 200, seconds: Math.round(outcome.elapsedMs / 1e3) } : null;
@@ -2196,6 +2235,8 @@ ${requestError || ""}`;
                 servedBy: model2,
                 servedVia,
                 servedKey,
+                // The slow first stream this review replaced on the same provider.
+                slowResend: resend ? resend.slow : null,
                 // Why the lane's first route could not serve, when it was a spent plan.
                 ownQuota: via ? ownQuota : null,
                 // Why the paid route served: the spent plans before it.
@@ -2231,9 +2272,21 @@ ${requestError || ""}`;
             console.log(`[Lane ${lane.id}/${route.modelId}] report rejected: ${error?.message?.startsWith("Review contract:") ? error.message : "invalid report envelope"}`);
           }
         }
+        const slowText = outcome.slowChars !== null ? `stream too slow (${outcome.slowChars} chars/s over the first ${Math.round(first.slow_resend.after_ms / 1e3)} s), stopped after ${Math.round(outcome.elapsedMs / 1e3)} s` : "";
+        const remainingMs = outcome.windowMs - outcome.elapsedMs;
+        if (checkSlow && outcome.slowChars !== null && remainingMs >= MIN_RESEND_WINDOW_MS) {
+          const endsAt = Date.now() + remainingMs;
+          slowResendsLeft -= 1;
+          tried.push(`${attemptLabel} -> ${slowText} (${attempts ?? 0} attempt(s))`);
+          console.log(`[Lane ${lane.id}/${model2.id}] ${route.provider} streamed ${outcome.slowChars} chars/s over the first ${Math.round(first.slow_resend.after_ms / 1e3)} s, below ${first.slow_resend.min_chars_per_second}; sending the same request once more to ${route.provider} with the remaining ${Math.round(remainingMs / 1e3)} s.`);
+          await statusPublisher.update(lane.id, "slow_resend", `${model2.id} @ ${route.provider}`);
+          steps.push({ key, resend: { endsAt, totalMs: outcome.windowMs, slow: { charsPerSecond: outcome.slowChars, provider: route.provider } } });
+          continue;
+        }
         if (!quotaNote) onlyQuota = false;
-        const failed = lastClosedStream ? `HTTP ${lastClosedStream.httpStatus}, stream closed before the model finished after ${lastClosedStream.seconds} s` : `HTTP ${response?.status ?? "request failed"}${quotaNote ? `, ${quotaNote.tried}` : ""}`;
+        const failed = lastClosedStream ? `HTTP ${lastClosedStream.httpStatus}, stream closed before the model finished after ${lastClosedStream.seconds} s` : outcome.localDeadline ? `local deadline reached after ${Math.round((resend ? resend.totalMs : outcome.windowMs) / 1e3)} s before the model finished${resend ? " (both requests together; resent after a slow stream)" : ""}` : slowText || `HTTP ${response?.status ?? "request failed"}${quotaNote ? `, ${quotaNote.tried}` : ""}`;
         tried.push(`${attemptLabel} -> ${lastFailureKind === "report-invalid" ? `evidence contract rejected: ${lastReportError}` : lastOutcome || failed} (${attempts ?? 0} attempt(s))`);
+        noteRoute(route.provider, outcome, quotaNote && { key: quotaKey, text: quotaNote.status }, resend);
         if (cross) continue;
         if (stage.keyCount > 1 && accountFailure(outcome)) {
           if (outcome.failureKind === "quota-exhausted" || outcome.failureKind === "authentication-failed") stage.spent.add(key);
@@ -2329,7 +2382,7 @@ ${fence}
       review,
       reasoningLength: 0,
       status: "diagnostic",
-      quotaDetail: quotaNotes.map((note) => note.status).join("\uFF1B"),
+      routeDetail: routeNotes.map((note) => note.text).join("\uFF1B"),
       onlyQuota: onlyQuota && quotaNotes.length > 0
     };
   }
@@ -2367,7 +2420,8 @@ ${fence}
     const modelLine = crossLabel ? `Lane ${lane.id}: ${servedModelId} via ${servedVia.provider} (${servedBy.id} on ${ownProvider(lane)} unavailable)` : `Lane ${lane.id}: ${servedBy?.id ?? laneModel.id}${isFirstPass ? " (first pass)" : ""}${viaText}`;
     const banner = [
       ...servedVia?.lastResort ? [`> \u2139\uFE0F Lane ${lane.id} \u7684\u4E24\u5BB6\u5957\u9910\u989D\u5EA6\u90FD\u5DF2\u7528\u5B8C\uFF08${result.lastResortReason}\uFF09\uFF0C\u672C\u6761 review \u7531\u6700\u540E\u515C\u5E95 \`${servedBy.label}\` \u7ECF \`${servedVia.provider}\`\uFF08Lane ${servedVia.credentialLane} \u7684\u56FA\u5B9A Secret \u69FD\u4F4D\uFF09\u751F\u6210\u3002`] : servedVia ? [`> \u2139\uFE0F Lane ${lane.id} \u7684 \`${servedBy.label}\` \u5728 \`${ownProvider(lane)}\` \u4E0A\u672A\u4EA7\u751F\u53EF\u7528\u5BA1\u6838${result.ownQuota ? `\uFF08${result.ownQuota.banner}\uFF09` : ""}\uFF0C\u672C\u6761 review \u7531${crossLabel ? `\u515C\u5E95\u6A21\u578B \`${crossLabel}\` ` : "\u540C\u4E00\u6A21\u578B"}\u7ECF \`${servedVia.provider}\`\uFF08Lane ${servedVia.credentialLane} \u7684\u56FA\u5B9A Secret \u69FD\u4F4D\uFF09\u751F\u6210\u3002`] : [],
-      ...servedKey?.from ? [`> \u2139\uFE0F Lane ${lane.id} \u7684\u7B2C ${servedKey.from.index + 1} \u628A key \u672A\u80FD\u670D\u52A1\uFF08${servedKey.from.reason}\uFF09\uFF0C\u672C\u6761 review \u7531\u540C\u4E00\u6A21\u578B\u7ECF\u540C\u4E00 Secret \u69FD\u4F4D\u7684\u7B2C ${servedKey.index + 1} \u628A key \u751F\u6210\u3002`] : []
+      ...servedKey?.from ? [`> \u2139\uFE0F Lane ${lane.id} \u7684\u7B2C ${servedKey.from.index + 1} \u628A key \u672A\u80FD\u670D\u52A1\uFF08${servedKey.from.reason}\uFF09\uFF0C\u672C\u6761 review \u7531\u540C\u4E00\u6A21\u578B\u7ECF\u540C\u4E00 Secret \u69FD\u4F4D\u7684\u7B2C ${servedKey.index + 1} \u628A key \u751F\u6210\u3002`] : [],
+      ...result.slowResend ? [`> \u2139\uFE0F Lane ${lane.id} \u7B2C\u4E00\u6B21\u8BF7\u6C42\u5728 \`${result.slowResend.provider}\` \u4E0A\u8F93\u51FA\u8FC7\u6162\uFF08${result.slowResend.charsPerSecond} \u5B57\u7B26/\u79D2\uFF09\uFF0C\u5DF2\u4E2D\u6B62\uFF1B\u672C\u6761 review \u6765\u81EA\u540C\u4E00\u6A21\u578B\u5728\u540C\u4E00\u4F9B\u5E94\u5546\u4E0A\u7684\u4E00\u6B21\u91CD\u53D1\u3002`] : []
     ];
     if (isFirstPass) {
       banner.push(`> \u2139\uFE0F \u8FD9\u662F\u672C PR \u7684\u9996\u6B21\u5BA1\u6838\uFF0C\u7531 \`${servedBy.label}\` \u5B8C\u6210\uFF1B\u540E\u7EED\u63D0\u4EA4\u7531 \`${laneModel.label}\` \u5BA1\u6838\uFF0C\u672C\u6761\u9996\u5BA1\u4F1A\u6298\u53E0\u4FDD\u7559\u5728\u8BC4\u8BBA\u5E95\u90E8\u3002`);
@@ -2464,7 +2518,7 @@ ${fence}
         lane.id,
         status === "valid" ? "complete" : status === "partial" ? "partial" : result.onlyQuota ? "quota" : "failed",
         servedLabel,
-        status === "diagnostic" ? result.quotaDetail || null : incremental ? `\u589E\u91CF\u5BA1\u6838\uFF0C\u81EA ${incremental.state.head.slice(0, 7)}` : null
+        status === "diagnostic" ? result.routeDetail || null : incremental ? `\u589E\u91CF\u5BA1\u6838\uFF0C\u81EA ${incremental.state.head.slice(0, 7)}` : null
       );
       console.log(`${currentComment ? "Updated" : "Created"} AI PR Review comment ${publishedComment.id} for Lane ${lane.id} with status=${status}.`);
     } catch (error) {

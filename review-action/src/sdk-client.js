@@ -213,8 +213,16 @@ function createChatRequester({ createDispatcher = (options) => new Agent(options
   createProxyDispatcher = (options) => new ProxyAgent(options), fetch: fetchImpl = undiciFetch,
   usageTrailerGraceMs = USAGE_TRAILER_GRACE_MS, idleCloseMs = IDLE_CLOSE_MS } = {}) {
 return async function requestChatCompletion({ apiKey, baseURL, payload, signal, timeoutMs,
-  protocol = 'openai-chat-completions', sessionId, proxyUrl, onProgress = () => {} }) {
+  protocol = 'openai-chat-completions', sessionId, proxyUrl, slowStream, onProgress = () => {} }) {
   const started = Date.now();
+  // The slow-stream check stops a request through its own abort, so the caller's deadline
+  // signal stays the only thing that reads as a deadline.
+  const local = new AbortController();
+  const followDeadline = () => local.abort();
+  if (signal?.aborted) local.abort(); else signal?.addEventListener?.('abort', followDeadline, { once: true });
+  const requestSignal = local.signal;
+  let slowCheck;
+  let slow = null;
   const timing = { transport: 'openai-sdk', headers_ms: null, first_event_ms: null, first_content_ms: null,
     last_byte_ms: null, elapsed_ms: 0, bytes: 0, content_chars: 0, reasoning_chars: 0, finish_reason: null, upstream: null };
   // The SDK ends iteration silently on clean EOF, [DONE] and a transport
@@ -257,6 +265,10 @@ return async function requestChatCompletion({ apiKey, baseURL, payload, signal, 
     }
     if (sessionId !== undefined && (typeof sessionId !== 'string' || !/^[A-Za-z0-9_.-]{1,120}$/.test(sessionId))) {
       const error = new Error('Invalid coding session identifier.'); error.code = 'REVIEW_INVALID_SESSION'; throw error;
+    }
+    if (slowStream !== undefined && (!Number.isSafeInteger(slowStream?.afterMs) || slowStream.afterMs < 1
+        || !Number.isSafeInteger(slowStream?.minCharsPerSecond) || slowStream.minCharsPerSecond < 1)) {
+      const error = new Error('Invalid slow-stream check.'); error.code = 'REVIEW_INVALID_SLOW_STREAM'; throw error;
     }
     if (proxyUrl !== undefined) {
       let proxy;
@@ -357,7 +369,7 @@ return async function requestChatCompletion({ apiKey, baseURL, payload, signal, 
       timing.transport = 'gemini-sse';
       const { model, ...request } = payload;
       const response = await observedFetch(`${baseURL.replace(/\/+$/, '')}/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse`, {
-        method: 'POST', signal,
+        method: 'POST', signal: requestSignal,
         headers: { 'content-type': 'application/json', accept: 'text/event-stream', 'x-goog-api-key': apiKey, ...sessionHeaders },
         body: JSON.stringify(request),
       });
@@ -367,21 +379,39 @@ return async function requestChatCompletion({ apiKey, baseURL, payload, signal, 
       timing.transport = 'anthropic-sdk';
       // Explicit null keeps ANTHROPIC_AUTH_TOKEN from adding a second credential.
       const client = new Anthropic({ ...options, authToken: null });
-      stream = await client.messages.create({ ...payload, stream: true }, { signal, maxRetries: 0 });
+      stream = await client.messages.create({ ...payload, stream: true }, { signal: requestSignal, maxRetries: 0 });
       events = stream[Symbol.asyncIterator]();
     } else {
       const client = new OpenAI({ ...options, organization: null, project: null });
       stream = protocol === 'openai-responses'
-        ? await client.responses.create({ ...payload, stream: true }, { signal, maxRetries: 0 })
-        : await client.chat.completions.create({ ...payload, stream: true }, { signal, maxRetries: 0 });
+        ? await client.responses.create({ ...payload, stream: true }, { signal: requestSignal, maxRetries: 0 })
+        : await client.chat.completions.create({ ...payload, stream: true }, { signal: requestSignal, maxRetries: 0 });
       events = stream[Symbol.asyncIterator]();
     }
     for (let next = await events.next(); !next.done; next = await events.next()) {
       const event = next.value;
       signal.throwIfAborted();
+      if (slow) break;
       body.events += 1;
       body.last_event = describeEvent(event, protocol);
-      timing.first_event_ms ??= Date.now() - started;
+      if (timing.first_event_ms === null) {
+        timing.first_event_ms = Date.now() - started;
+        // One look, slowStream.afterMs after the first event, so queueing before it does not count.
+        // Text and thinking both count: a model thinks first, and either is the provider's output rate.
+        if (slowStream) {
+          slowCheck = setTimeout(() => {
+            if (timing.finish_reason) return;
+            // The time actually measured: a busy event loop may fire the timer late.
+            const measuredMs = Math.max(slowStream.afterMs, Date.now() - started - timing.first_event_ms);
+            // Compared unrounded: 349.6 chars/s is below a floor of 350; the logs show it rounded.
+            const rate = (timing.reasoning_chars + timing.content_chars) * 1000 / measuredMs;
+            if (rate >= slowStream.minCharsPerSecond) return;
+            slow = { chars_per_second: Math.floor(rate), after_ms: measuredMs };
+            local.abort();
+          }, slowStream.afterMs);
+          slowCheck.unref?.();
+        }
+      }
       if (protocol === 'anthropic-messages') {
         if (event.type === 'message_start') {
           timing.upstream = safeCode(event.message?.model) || timing.upstream;
@@ -522,6 +552,17 @@ return async function requestChatCompletion({ apiKey, baseURL, payload, signal, 
       timing.incomplete_end && /^[A-Za-z]+(?:\/(?:(?:REVIEW|UND_ERR)_[A-Z_]+|E[A-Z_]+))?$/.test(body.error || '')
         && `body_error=${body.error}`,
     ].filter(Boolean).join(', ');
+    if (slow && !signal?.aborted) {
+      // The provider was serving, only slowly: a stop the caller asked for, never an upstream error.
+      const stopped = new Error(`Stream stopped as too slow: ${slow.chars_per_second} chars/s over the first ${Math.round(slow.after_ms / 1000)} s.`);
+      stopped.name = 'SlowStreamError';
+      stopped.code = 'REVIEW_SLOW_STREAM';
+      stopped.charsPerSecond = slow.chars_per_second;
+      stopped.httpStatus = Number.isInteger(timing.status) ? timing.status : undefined;
+      stopped.unserved = false;
+      Object.assign(timing, { error_code: 'SLOW_STREAM', error_name: 'SlowStreamError', unserved: false, slow_chars_per_second: slow.chars_per_second });
+      throw stopped;
+    }
     const sanitized = new Error(signal?.aborted ? 'AI endpoint request aborted (model deadline reached).'
       : `SDK request failed${detail ? ` (${detail})` : ''}.`);
     sanitized.name = signal?.aborted ? 'AbortError' : 'SDKRequestError';
@@ -561,6 +602,8 @@ return async function requestChatCompletion({ apiKey, baseURL, payload, signal, 
     throw sanitized;
   } finally {
     clearInterval(progressTimer);
+    clearTimeout(slowCheck);
+    signal?.removeEventListener?.('abort', followDeadline);
     // Our own cleanup abort must not be logged as a transport error on the body.
     body.end ??= 'cancel'; body.ended_ms ??= Date.now() - started;
     try { stream?.controller?.abort(); } catch { timing.cleanup_error = 'STREAM_ABORT'; }

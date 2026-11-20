@@ -401,13 +401,13 @@ function laneForUrl(url) {
 
 // Mirrors sdk-client's per-protocol endpoint and credential header. Gemini replies are
 // normalized to the chat-shaped result the real client returns after streaming.
-const stubSdkRequest = (fetch) => async ({ apiKey, baseURL, payload, signal, protocol, sessionId, proxyUrl }) => {
+const stubSdkRequest = (fetch) => async ({ apiKey, baseURL, payload, signal, protocol, sessionId, proxyUrl, slowStream }) => {
   const url = protocol === 'google-generate-content'
     ? `${baseURL}/models/${encodeURIComponent(payload.model)}:streamGenerateContent`
     : `${baseURL}/${protocol === 'openai-responses' ? 'responses' : protocol === 'anthropic-messages' ? 'messages' : 'chat/completions'}`;
   const credential = protocol === 'anthropic-messages' ? { 'x-api-key': apiKey }
     : protocol === 'google-generate-content' ? { 'x-goog-api-key': apiKey } : { authorization: `Bearer ${apiKey}` };
-  const response = await fetch(url, { body: JSON.stringify(payload), signal, redirect: 'error', requestProxy: proxyUrl,
+  const response = await fetch(url, { body: JSON.stringify(payload), signal, redirect: 'error', requestProxy: proxyUrl, slowStream,
     headers: { ...credential, ...(sessionId ? { 'x-opencode-session': sessionId } : {}) } });
   if (protocol !== 'google-generate-content' || !response.ok) return response;
   const gemini = JSON.parse(await response.text());
@@ -486,7 +486,7 @@ async function scenario(route, overrides = {}, options = {}) {
     const lane = laneForUrl(url);
     const match = /\/models\/([^/:]+):(?:stream)?[gG]enerateContent$/.exec(url);
     const model = match ? decodeURIComponent(match[1]) : body.model;
-    const call = { lane, model, body, headers: request.headers, url, signal: request.signal, redirect: request.redirect, proxy: request.requestProxy };
+    const call = { lane, model, body, headers: request.headers, url, signal: request.signal, redirect: request.redirect, proxy: request.requestProxy, slowStream: request.slowStream };
     captured.push(call);
     return route(call, { posted, logs });
   };
@@ -1348,7 +1348,7 @@ for (const useBundle of [false, true]) {
     && quotaC.includes('额度用尽，不是限流：`command-code` 的周用量上限已用完，2026-10-22T08:56:41Z（北京时间 2026-10-22 16:56）重置')
     && quotaC.includes('gpt-6-luna -> HTTP 429, command-code weekly usage limit exhausted, resets 2026-10-22T08:56:41Z (1 attempt(s))')
     && quotaC.includes('gpt-6-luna via opencode-go gpt-6-luna -> HTTP 503 (1 attempt(s))')
-    && r.statusUpdates.at(-1).includes('| C | gpt-6-luna | 审核未生成（command-code 周上限已用完，北京时间 2026-10-22 16:56 重置） |'));
+    && r.statusUpdates.at(-1).includes('| C | gpt-6-luna | 审核未生成（command-code 周上限已用完，北京时间 2026-10-22 16:56 重置；opencode-go HTTP 503） |'));
 }
 // Both plans spent: each provider is named with its own window and reset, and the lane reads as a
 // quota failure in the status table.
@@ -1384,13 +1384,13 @@ r = await scenario((call) => lunaOnCommandCode(call) ? Promise.reject(unserved(4
   : lunaOnGo(call) ? reply(503, '{"error":"unavailable"}') : healthy(call));
 check('a plain rate limit is not relabelled as an exhausted quota', !r.error
   && laneComment(r, 'C').includes('gpt-6-luna -> HTTP 429 (1 attempt(s))') && !laneComment(r, 'C').includes('额度用尽')
-  && r.statusUpdates.at(-1).includes('| C | gpt-6-luna | 审核未生成 |'));
+  && r.statusUpdates.at(-1).includes('| C | gpt-6-luna | 审核未生成（command-code HTTP 429；opencode-go HTTP 503） |'));
 // ci-central#72 review: a per-minute limit stays a rate limit even when its raw text says "usage limit".
 r = await scenario((call) => lunaOnCommandCode(call) ? reply(429, '{"error":{"code":"rate_limit_exceeded","message":"usage limit exceeded per minute"}}')
   : lunaOnGo(call) ? reply(503, '{"error":"unavailable"}') : healthy(call));
 check('a per-minute limit worded as a usage limit is not relabelled as an exhausted quota', !r.error
   && laneComment(r, 'C').includes('gpt-6-luna -> HTTP 429 (1 attempt(s))') && !laneComment(r, 'C').includes('额度用尽')
-  && r.statusUpdates.at(-1).includes('| C | gpt-6-luna | 审核未生成 |'));
+  && r.statusUpdates.at(-1).includes('| C | gpt-6-luna | 审核未生成（command-code HTTP 429；opencode-go HTTP 503） |'));
 // ci-central#72 review (B6, C5): the runner reads no plan into generic raw text; the SDK client decides that.
 r = await scenario((call) => lunaOnCommandCode(call) ? reply(429, '{"error":{"code":"rate_limit_exceeded","message":"Usage limit reached, retry later"}}')
   : lunaOnGo(call) ? reply(503, '{"error":"unavailable"}') : healthy(call));
@@ -2611,5 +2611,72 @@ check('last resort: an incremental round goes to Luna, not a Sol first pass', !r
   && laneRoutes(r, 'C') === 'gpt-6-luna@lane-c.cc,gpt-6-luna@lane-a.example,gpt-6-luna@lane-c.openai'
   && isIncremental(incrementalResort) && incrementalResort.body.reasoning?.effort === 'xhigh'
   && !lastLaneComment(r, 'C').includes('ai-pr-review-first-pass:v1 lane=C'));
+
+// One resend on Go after a slow stream (the owner's decision, 2026-11-19). It was built for MiniMax M3.1
+// Flash: on Go a request lands on a fast or a slow backend at random, so a stream below the floor over its
+// first minute is stopped and the same request goes once more to Go, with what is left of the lane's ten
+// minutes and no second check. No live lane sets it since Lane C moved to DeepSeek V4.1 Flash
+// (2026-11-20); these checks run on a frozen copy of resume-form-assistant-plugin's MiniMax-era config.
+const liveMiniMaxConfig = JSON.parse(fs.readFileSync(path.join(here, 'fixtures', 'slow-resend-config.json'), 'utf8'));
+const slowEnv = { ...lastResortEnv, PR_REVIEW_CONFIG: JSON.stringify({ ...liveMiniMaxConfig, repository: 'TshyGO/NebulaLab' }) };
+const slowError = () => Object.assign(new Error('Stream stopped as too slow: 210 chars/s over the first 60 s.'),
+  { name: 'SlowStreamError', code: 'REVIEW_SLOW_STREAM', charsPerSecond: 210, httpStatus: 200, unserved: false });
+const deadlineError = () => Object.assign(new Error('AI endpoint request aborted (model deadline reached).'), { name: 'AbortError', code: 'REVIEW_DEADLINE' });
+const miniMaxOnGo = (call) => call.model === 'minimax-m3.1-flash' && call.url.startsWith('https://lane-a.');
+const goMiniMaxSequence = (outcomes, rest = healthy) => {
+  let index = 0;
+  return (call) => miniMaxOnGo(call) ? outcomes[Math.min(index++, outcomes.length - 1)](call) : rest(call);
+};
+const slowCheck = { afterMs: 60000, minCharsPerSecond: 350 };
+
+r = await scenario(goMiniMaxSequence([() => Promise.reject(slowError()), healthy]), slowEnv);
+const slowServed = r.captured.filter(miniMaxOnGo);
+check('slow stream: a slow first MiniMax stream on Go is sent once more to Go, without a second check, and serves', !r.error
+  && laneRoutes(r, 'C') === 'minimax-m3.1-flash@lane-a.example,minimax-m3.1-flash@lane-a.example'
+  && slowServed.length === 2 && JSON.stringify(slowServed[0].slowStream) === JSON.stringify(slowCheck) && slowServed[1].slowStream === undefined
+  // A fresh session for the resend, so a gateway that keeps a session on one backend draws again.
+  && /-lane-C$/.test(slowServed[0].headers['x-opencode-session'] || '')
+  && slowServed[1].headers['x-opencode-session'] === `${slowServed[0].headers['x-opencode-session']}-resend`
+  && !r.captured.some(onCc) && !r.captured.some(onPaidApi)
+  && lastLaneComment(r, 'C').includes('status=valid')
+  && lastLaneComment(r, 'C').includes('第一次请求在 `opencode-go` 上输出过慢（210 字符/秒），已中止；本条 review 来自同一模型在同一供应商上的一次重发。')
+  && r.statusUpdates.some((body) => body.includes('| C | minimax-m3.1-flash | 首次请求输出过慢已中止，同模型在同一供应商重发中 | minimax-m3.1-flash @ opencode-go |'))
+  && r.logs.some((line) => line.includes('[Lane C/minimax-m3.1-flash] opencode-go streamed 210 chars/s over the first 60 s, below 350; sending the same request once more to opencode-go'))
+  && r.captured.filter((call) => call.model.includes('muse') || call.model.startsWith('claude-')).every((call) => call.slowStream === undefined));
+
+r = await scenario(goMiniMaxSequence([() => Promise.reject(slowError()), () => Promise.reject(deadlineError())], (call) => onCc(call) ? ccSpent() : healthy(call)), slowEnv);
+check('slow stream: a resend that also runs out of time goes on to Command Code, and the status names both routes', !r.error
+  && laneRoutes(r, 'C') === 'minimax-m3.1-flash@lane-a.example,minimax-m3.1-flash@lane-a.example,minimax/minimax-m3.1-flash@lane-c.cc'
+  && !r.captured.some(onPaidApi)
+  && lastLaneComment(r, 'C').includes('status=diagnostic')
+  && lastLaneComment(r, 'C').includes('minimax-m3.1-flash -> stream too slow (210 chars/s over the first 60 s), stopped after')
+  && lastLaneComment(r, 'C').includes('local deadline reached after')
+  && lastLaneComment(r, 'C').includes('local deadline reached after 600 s before the model finished (both requests together; resent after a slow stream)')
+  && r.logs.some((line) => line.includes('provider=opencode-go protocol=openai-chat-completions failed: Local review deadline reached after 600 s before a complete final response'))
+  && r.captured.filter(onCc).every((call) => call.slowStream === undefined)
+  && r.statusUpdates.at(-1).includes('| C | minimax-m3.1-flash | 审核未生成（opencode-go 输出过慢，重发一次后仍未在 600 秒内写完；command-code API 余额已用完） |'));
+
+r = await scenario(goMiniMaxSequence([() => Promise.reject(slowError()), () => reply(503, '{"error":"unavailable"}')], (call) => onCc(call) ? ccSpent() : healthy(call)), slowEnv);
+check('slow stream: a resend that fails for another reason keeps the slow first stream in the status table', !r.error
+  && laneRoutes(r, 'C') === 'minimax-m3.1-flash@lane-a.example,minimax-m3.1-flash@lane-a.example,minimax/minimax-m3.1-flash@lane-c.cc'
+  && lastLaneComment(r, 'C').includes('minimax-m3.1-flash -> HTTP 503 (1 attempt(s))')
+  && r.statusUpdates.at(-1).includes('| C | minimax-m3.1-flash | 审核未生成（opencode-go 输出过慢已重发一次，重发结果：HTTP 503；command-code API 余额已用完） |'));
+
+// resume-form-assistant-plugin #539 (2026-11-19): MiniMax on a slow Go backend ran out of time, and
+// the table named only Command Code's spent credit. Every route's reason is now in the row.
+r = await scenario(goMiniMaxSequence([() => Promise.reject(deadlineError())], (call) => onCc(call) ? ccSpent() : healthy(call)), slowEnv);
+check('a Go deadline followed by Command Code\'s spent credit names both in the status table', !r.error
+  && laneRoutes(r, 'C') === 'minimax-m3.1-flash@lane-a.example,minimax/minimax-m3.1-flash@lane-c.cc'
+  && lastLaneComment(r, 'C').includes('minimax-m3.1-flash -> local deadline reached after 600 s before the model finished (1 attempt(s))')
+  // The check stays on the Go route: a deadline there leaves the resend unused, and the next route gets none.
+  && r.captured.filter(miniMaxOnGo).length === 1 && r.captured.filter(onCc).length === 1 && r.captured.filter(onCc).every((call) => call.slowStream === undefined)
+  && r.statusUpdates.at(-1).includes('| C | minimax-m3.1-flash | 审核未生成（opencode-go 未在 600 秒内写完；command-code API 余额已用完） |'));
+
+// No other route has the check: NebulaLab's lanes and the shared policy configs never send one.
+r = await scenario(healthy);
+const unchecked = r.captured.length;
+r = await scenario(healthy, lastResortEnv);
+check('slow stream: lanes without slow_resend never send a slow-stream check', unchecked > 0 && !r.error
+  && r.captured.every((call) => call.slowStream === undefined));
 
 if (checks.some((value) => !value)) process.exitCode = 1;

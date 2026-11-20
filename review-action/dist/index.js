@@ -75,9 +75,10 @@ function keySlotFor(config, laneId, provider) {
 
 function validateModelOptions(config, lane, model, location) {
   const protocol = model.protocol ?? lane.protocol;
-  if (model.reasoning_effort !== undefined && (protocol !== 'openai-responses'
+  // Chat Completions takes the effort as a top-level `reasoning_effort` (DeepSeek V4.1 Flash on Go, 2026-11-20).
+  if (model.reasoning_effort !== undefined && (!['openai-responses', 'openai-chat-completions'].includes(protocol)
     || !['none', 'low', 'medium', 'high', 'xhigh', 'max'].includes(model.reasoning_effort))) {
-    throw new Error(`${location}.reasoning_effort requires openai-responses and a supported effort.`);
+    throw new Error(`${location}.reasoning_effort requires openai-responses or openai-chat-completions and a supported effort.`);
   }
   if (model.omit_max_tokens && protocol !== 'openai-chat-completions') {
     throw new Error(`${location}.omit_max_tokens is only supported by openai-chat-completions.`);
@@ -121,6 +122,25 @@ function validateKeySlots(config) {
   }
 }
 
+// The slow-stream resend on a lane's own provider (the owner's decision, 2026-11-19): Go serves a model from
+// a fast or a slow backend at random, so a first route on Go may stop a stream whose output over its
+// first after_ms (counted from the first streamed event) is below min_chars_per_second, and send the
+// same request once more there with the rest of the window.
+function validateSlowResend(route, at) {
+  const slow = route.slow_resend;
+  if (route.provider !== 'opencode-go') throw new Error(`${at}.slow_resend is allowed only on an opencode-go first route.`);
+  if (!slow || typeof slow !== 'object' || Array.isArray(slow)
+      || Object.keys(slow).sort().join(',') !== 'after_ms,min_chars_per_second') {
+    throw new Error(`${at}.slow_resend must set exactly after_ms and min_chars_per_second.`);
+  }
+  if (!Number.isSafeInteger(slow.after_ms) || slow.after_ms < 10000 || slow.after_ms > 300000) {
+    throw new Error(`${at}.slow_resend.after_ms must be an integer from 10000 to 300000.`);
+  }
+  if (!Number.isSafeInteger(slow.min_chars_per_second) || slow.min_chars_per_second < 1 || slow.min_chars_per_second > 100000) {
+    throw new Error(`${at}.slow_resend.min_chars_per_second must be an integer from 1 to 100000.`);
+  }
+}
+
 // A lane's routes are the providers it asks, in order, each once with the lane's model. A later
 // route may name the model's id on its provider; a label marks an explicitly different model. The
 // last route may be a paid API asked only when the two plans before it both report a spent quota;
@@ -133,11 +153,12 @@ function validateRoutes(config, lane, location) {
     const at = `${location}.routes[${index}]`;
     if (!route || typeof route !== 'object' || Array.isArray(route)) throw new Error(`${at} must be an object.`);
     const gated = route.when !== undefined;
-    const allowed = gated ? ['provider', 'when', 'model', 'first_pass'] : index === 0 ? ['provider'] : ['provider', 'id', 'label'];
+    const allowed = gated ? ['provider', 'when', 'model', 'first_pass'] : index === 0 ? ['provider', 'slow_resend'] : ['provider', 'id', 'label'];
     if (Object.keys(route).some((key) => !allowed.includes(key))) {
       throw new Error(`${at} may only set ${allowed.join(', ')}.`);
     }
     if (typeof route.provider !== 'string' || !route.provider.trim()) throw new Error(`${at}.provider must be non-empty.`);
+    if (route.slow_resend !== undefined) validateSlowResend(route, at);
     if (!keySlotFor(config, lane.id, route.provider)) throw new Error(`${at}.provider ${route.provider} is not in any key slot.`);
     for (const field of ['id', 'label']) {
       if (route[field] !== undefined && (typeof route[field] !== 'string' || !route[field].trim())) {
