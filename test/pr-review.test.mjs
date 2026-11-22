@@ -2487,6 +2487,34 @@ for (const useBundle of [false, true]) {
     && r.logs.some((line) => line.includes('[Lane C/gpt-6.2-sol] key 1 of 2 could not serve'))
     && !leaksOpenaiKey(r));
 }
+// Since 2026-11-22 OpenAI reports a spent credit balance inside an accepted stream (HTTP 200, an
+// `error` event with insufficient_quota / credit_balance_exhausted), so the SDK error has no HTTP
+// status; the SDK client's creditExhausted verdict alone must still move the request to key 2.
+const streamError = (providerType, providerCode, extra = {}) => Object.assign(new Error('SDK request failed (http=200).'),
+  { name: 'SDKRequestError', code: providerCode, httpStatus: 200, unserved: false, providerCode, providerType, ...extra });
+const openaiStreamSpent = () => Promise.reject(streamError('insufficient_quota', 'credit_balance_exhausted', { creditExhausted: true }));
+for (const useBundle of [false, true]) {
+  r = await scenario((call) => keyOf(call) === 'openai-one' ? openaiStreamSpent() : healthy(call), openaiTwoKeys, prNumbered(43, { useBundle }));
+  check(`NebulaLab C: a credit balance spent inside the stream sends the same Sol request once with key 2 (bundle ${useBundle})`, !r.error
+    && laneCKeys(r) === 'gpt-6.2-sol@openai-one,gpt-6.2-sol@openai-two'
+    && laneCBody(r).includes('status=valid') && laneCBody(r).includes('ai-pr-review-first-pass:v1 lane=C')
+    && laneCBody(r).includes('· key 2/2 ·') && laneCBody(r).includes('> ℹ️ Lane C 的第 1 把 key 未能服务（API 余额已用完')
+    && r.logs.some((line) => line.includes('[Lane C/gpt-6.2-sol] key 1 of 2 could not serve (quota-exhausted, HTTP 200)'))
+    && !leaksOpenaiKey(r));
+}
+// Both accounts spent: the lane's model then crosses to Luna on Go, as when OpenAI is down.
+r = await scenario((call) => call.url.startsWith('https://lane-c.openai.') ? openaiStreamSpent() : healthy(call), openaiTwoKeys, prNumbered(43));
+check('NebulaLab C: with both OpenAI credit balances spent, Terra crosses to Luna on Go after trying both keys', !r.error
+  && laneCKeys(r).startsWith('gpt-6.2-sol@openai-one,gpt-6.2-sol@openai-two,')
+  && laneCKeys(r).includes('gpt-6.1-terra@openai-') && laneCKeys(r).endsWith(',gpt-6-luna@lane-a-key')
+  && laneCBody(r).includes('status=valid') && laneCBody(r).includes('Lane C: gpt-6-luna via opencode-go')
+  && laneCBody(r).includes('在 `openai` 上未产生可用审核（API 余额已用完）')
+  && !leaksOpenaiKey(r));
+// Any other error inside an accepted stream is the provider's, and never switches keys.
+r = await scenario((call) => call.url.startsWith('https://lane-c.openai.') && call.model === 'gpt-6.2-sol'
+  ? Promise.reject(streamError('server_error', 'server_error')) : healthy(call), openaiTwoKeys, prNumbered(43));
+check('NebulaLab C: a provider-side error inside the stream does not switch keys, and Terra follows on key 1', !r.error
+  && laneCKeys(r) === 'gpt-6.2-sol@openai-one,gpt-6.1-terra@openai-one' && !laneCBody(r).includes('把 key 未能服务'));
 r = await scenario((call) => call.url.startsWith('https://lane-c.openai.') && call.model === 'gpt-6.2-sol' ? reply(503, 'unavailable') : healthy(call),
   openaiTwoKeys, prNumbered(43));
 check('NebulaLab C: an OpenAI-side failure does not switch keys, and Terra follows on key 1', !r.error

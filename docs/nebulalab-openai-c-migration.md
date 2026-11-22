@@ -56,6 +56,10 @@ starts on the first key, so one account's prompt cache serves all of them. The s
 only takes a request the first could not serve for an account reason (quota spent, key
 refused, account rate limit), before the lane crosses to Luna. The runner keeps no state
 between runs: while the first key is spent, each review gets its immediate refusal first.
+OpenAI reports a spent balance inside an accepted stream (HTTP 200, then an `error` event and
+`response.failed` with `insufficient_quota` / `credit_balance_exhausted`); the runner reads that
+as an account reason too. Before 2026-11-22 it did not, so when the first account ran out that
+day, every review went straight to Luna on Go without trying the second key.
 The `command-code` entry and the other repositories' `openai` entries keep one key.
 
 ## Production cutover
