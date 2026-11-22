@@ -766,6 +766,43 @@ for (const [name, implementation] of [
         && !rejected.message.includes('PRIVATE') && !rejected.message.includes('insufficient'));
     assert.equal(f.calls.length, 1);
   });
+  // OpenAI's answer once an account's credit ran out (NebulaLab #1946, 2026-11-22): HTTP 200, the
+  // stream starts, then an `error` event and a `response.failed`, both naming insufficient_quota /
+  // credit_balance_exhausted. With no HTTP error status, only these codes can say it is the account.
+  const creditStreamError = { type: 'insufficient_quota', code: 'credit_balance_exhausted', param: null,
+    message: 'You have no credits remaining. PRIVATE billing detail.' };
+  const namedFrame = (event) => `event: ${event.type}\r\ndata: ${JSON.stringify(event)}\r\n\r\n`;
+  for (const [label, events, credit] of [
+    ['an error event then response.failed', [
+      { type: 'response.created', sequence_number: 0, response: { status: 'in_progress' } },
+      { type: 'response.in_progress', sequence_number: 1, response: { status: 'in_progress' } },
+      { type: 'error', sequence_number: 2, error: creditStreamError },
+      { type: 'response.failed', sequence_number: 3, response: { status: 'failed', error: creditStreamError } },
+    ], true],
+    ['response.failed alone', [
+      { type: 'response.created', sequence_number: 0, response: { status: 'in_progress' } },
+      { type: 'response.failed', sequence_number: 1, response: { status: 'failed', error: creditStreamError } },
+    ], true],
+    ['a provider-side stream error', [
+      { type: 'response.created', sequence_number: 0, response: { status: 'in_progress' } },
+      { type: 'error', sequence_number: 1, error: { type: 'server_error', code: 'server_error', param: null, message: 'PRIVATE outage' } },
+    ], false],
+  ]) {
+    test(`${name}: a Responses stream with ${label} ${credit ? 'is' : 'is not'} reported as exhausted credit`, async (t) => {
+      const f = await fixture(t, implementation, async (_req, res) => {
+        res.writeHead(200, { 'content-type': 'text/event-stream' });
+        res.end(events.map(namedFrame).join(''));
+      });
+      await assert.rejects(f.invoke({ protocol: 'openai-responses' }),
+        (rejected) => rejected.status === undefined && rejected.httpStatus === 200 && rejected.creditExhausted === credit
+          && rejected.quotaExhausted === false && rejected.unserved === false
+          && rejected.providerType === (credit ? 'insufficient_quota' : 'server_error')
+          && rejected.providerCode === (credit ? 'credit_balance_exhausted' : 'server_error')
+          && !JSON.stringify(rejected).includes('PRIVATE') && !rejected.message.includes('credits'));
+      assert.equal(f.calls.length, 1);
+      assert.ok(!JSON.stringify(f.logs).includes('PRIVATE'));
+    });
+  }
   test(`${name}: Anthropic Messages keeps the message_start input count when message_delta reports zero`, async (t) => {
     const f = await fixture(t, implementation, async (_req, res) => {
       res.writeHead(200, { 'content-type': 'text/event-stream' });

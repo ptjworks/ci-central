@@ -754,6 +754,9 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
       httpStatus = Number.isInteger(error?.status) ? error.status : error?.httpStatus;
       retryAfterMs = Number.isSafeInteger(error?.retryAfterMs) ? error.retryAfterMs : undefined;
       quota = reportedQuota(error);
+      // A balance spent inside an accepted stream (OpenAI since 2026-11-22) has no HTTP status for
+      // classifyFailure to read; the SDK client's verdict alone says the account ran out.
+      if (!quota && error?.creditExhausted === true && !Number.isInteger(error?.status)) quota = { credit: true };
     } finally {
       clearTimeout(timeout);
     }

@@ -487,6 +487,9 @@ return async function requestChatCompletion({ apiKey, baseURL, payload, signal, 
         if (event.type === 'response.failed' || event.type === 'error') {
           const error = new Error('Responses stream failed.');
           error.code = safeCode(event.response?.error?.code || event.code) || 'REVIEW_RESPONSE_FAILED';
+          // The provider's type and code (never its message) for the account check below.
+          const provided = event.type === 'error' ? { code: event.code } : event.response?.error;
+          error.error = { code: provided?.code, type: provided?.type };
           throw error;
         }
         continue;
@@ -576,9 +579,15 @@ return async function requestChatCompletion({ apiKey, baseURL, payload, signal, 
     // or as a 400 whose message says the credit balance is too low; Command Code as a 400 "You have
     // insufficient credits to make this request" (seen on every protocol, 2026-11-03).
     const providerMessage = typeof providerError?.message === 'string' ? providerError.message : '';
+    // OpenAI, since 2026-11-22, accepts the request (HTTP 200) and reports the spent balance inside
+    // the stream: an `error` event and a `response.failed`, both insufficient_quota /
+    // credit_balance_exhausted. No HTTP status can say it is the account there, so these codes do;
+    // any other error inside a stream stays the provider's.
+    const inStream = !Number.isInteger(error.status);
     sanitized.creditExhausted = sanitized.status === 402 || providerError?.type === 'billing_error'
       || /credit balance is too low/i.test(providerMessage)
-      || (sanitized.status === 400 && /\binsufficient credits\b/i.test(providerMessage));
+      || (sanitized.status === 400 && /\binsufficient credits\b/i.test(providerMessage))
+      || (inStream && (providerError?.type === 'insufficient_quota' || providerError?.code === 'credit_balance_exhausted'));
     // The Anthropic SDK keeps the whole error body, where Go adds the plan metadata.
     const quota = planQuota(error, providerError, error.error, peekedLimitName);
     sanitized.quotaExhausted = quota.exhausted;

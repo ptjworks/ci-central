@@ -295,6 +295,7 @@ reusable workflow 先解析并校验 40 位中央 ref：外部 caller 必须把 
 - Go 的 `*UsageLimitError`，重置时间取自 `retry-after`，窗口取自 `metadata.limitName`（也认 `5h`、`7d`、`rolling_5h` 这样的简写）。OpenAI SDK 的报错不带这个字段，所以 SDK 客户端会读一份有上限的报错正文副本，只取出这一个字段；
 - `insufficient_quota`，以及 “exceeded your current quota”；
 - Command Code 的余额用完：HTTP 400 `invalid_request_error`、message “You have insufficient credits to make this request”（2026-11-03 从 szlab 探得，Responses、Chat Completions、Messages 三种协议相同）。SDK 客户端只输出“余额用完”这个布尔值，运行器只在 Command Code 路由上这样读，记作余额用完而不是套餐窗口。
+- OpenAI 的余额用完（2026-11-22，NebulaLab #1946）：不再先回 429，而是 HTTP 200 接受请求，流里先发 `response.created`、`response.in_progress`，再发一个 `error` 事件和一个 `response.failed`，两者都是 `type: insufficient_quota`、`code: credit_balance_exhausted`。OpenAI SDK 把它抛成没有 HTTP 状态码的错误，旧版按状态码判断，于是当成供应商故障，从不换 key：第 1 个账号用完后，Lane C 每次都直接去了 Go。现在流里出错、且类型是 `insufficient_quota` 或代码是 `credit_balance_exhausted` 时，SDK 客户端输出“余额用完”，运行器记作账号原因，先换同一槽位的下一把 key，评论写“API 余额已用完”。流里其他错误仍算供应商故障，不换 key。
 
 “usage limit”“quota exceeded” 这类泛用说法，只有同时出现套餐、计费、重置或窗口字样时才算额度用尽。报错里出现按分钟、按秒的字样（per minute、RPM、TPM 等）时算限流，除非供应商写明了这个上限的套餐窗口：Go 的 `limitName`，或紧挨在 “usage limit” 前面的 weekly、5-hour 这类词。`*UsageLimitError`、`insufficient_quota` 这类错误码本身就表示套餐额度。“resets in 5 hours” 这类话只说明多久后重置，不当作窗口。运行器读原文时不单凭 “usage limit” 判断额度，以 SDK 客户端的结论为准。读报错正文时连接中断，照样按 HTTP 状态码报告。
 

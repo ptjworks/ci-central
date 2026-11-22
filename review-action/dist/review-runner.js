@@ -1993,6 +1993,7 @@ ${requestError || ""}`;
       httpStatus = Number.isInteger(error?.status) ? error.status : error?.httpStatus;
       retryAfterMs = Number.isSafeInteger(error?.retryAfterMs) ? error.retryAfterMs : void 0;
       quota = reportedQuota(error);
+      if (!quota && error?.creditExhausted === true && !Number.isInteger(error?.status)) quota = { credit: true };
     } finally {
       clearTimeout(timeout);
     }
