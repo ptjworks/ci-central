@@ -274,6 +274,8 @@ for (const loader of [source, bundled]) {
     [(config) => { config.lanes[1].first_pass.temperature = 0.2; }, /first_pass\.temperature is not supported by anthropic-messages/],
     [(config) => { config.lanes[1].first_pass.max_output_tokens = 0; }, /first_pass\.max_output_tokens must be a positive integer/],
     [(config) => { config.lanes[1].first_pass = 'claude-sonnet-5-5'; }, /first_pass must be an object/],
+    [(config) => { config.lanes[1].first_pass.cache_system_prompt = true; }, /cache_system_prompt.*requires openai-responses/],
+    [(config) => { config.lanes[2].first_pass.cache_system_prompt = 'true'; }, /cache_system_prompt must be a boolean/],
   ]) {
     const config = structuredClone(nebula);
     mutate(config);
@@ -328,6 +330,7 @@ const geminiLane = (config) => {
   config.lanes[2].protocol = 'google-generate-content';
   delete config.lanes[2].first_pass;
   delete config.lanes[2].model.reasoning_effort;
+  delete config.lanes[2].model.cache_system_prompt;
   config.lanes[2].routes = [{ provider: 'openai' }];
   return config;
 };

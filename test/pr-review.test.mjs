@@ -2375,12 +2375,21 @@ const openaiEgress = { ...twEgress, PR_REVIEW_CONFIG: JSON.stringify(nebulaConfi
 const laneCBody = (result) => result.posted.find((body) => body.startsWith('<!-- ai-pr-review-bot:lane-C -->')) || '';
 const laneCCalls = (result) => result.captured.filter((call) => call.lane === 'C' || (call.lane === 'A' && call.model === 'gpt-6-luna'));
 const nebulaCFirstPassMark = (model) => `<!-- ai-pr-review-first-pass:v1 lane=C head=${H1} model=${model} -->`;
+const cachesOnlySystemPrompt = ({ prompt_cache_options: cache, input }) => {
+  const [developer, user] = input;
+  const [system] = developer.content;
+  return cache?.mode === 'explicit' && input.length === 2 && developer.role === 'developer'
+    && developer.content.length === 1 && system?.type === 'input_text'
+    && system.text.includes('Review contract:') && system.prompt_cache_breakpoint?.mode === 'explicit'
+    && user.role === 'user' && typeof user.content === 'string' && user.content.includes('Changed files and patches:');
+};
 r = await scenario(healthy, openaiEgress, atHead(H1, { useBundle: true }));
 const solFirst = laneCBody(r);
 check('NebulaLab C: GPT-6.2 Sol alone performs the first pass on OpenAI with high reasoning', !r.error
   && laneCCalls(r).length === 1 && laneCCalls(r)[0].model === 'gpt-6.2-sol'
   && laneCCalls(r)[0].body.reasoning?.effort === 'high'
   && laneCCalls(r)[0].headers.authorization === 'Bearer openai-test-key'
+  && cachesOnlySystemPrompt(laneCCalls(r)[0].body)
   && solFirst.includes(nebulaCFirstPassMark('gpt-6.2-sol'))
   && solFirst.includes('GPT-6.2 Sol') && solFirst.includes('status=valid'));
 const historicalCFirstPass = (model) => [
@@ -2400,6 +2409,7 @@ for (const [model, firstPass] of [
     && laneCCalls(r).map((call) => call.model).join(',') === 'gpt-6.1-terra'
     && laneCCalls(r)[0].headers.authorization === 'Bearer openai-test-key'
     && laneCCalls(r)[0].body.reasoning?.effort === 'high'
+    && cachesOnlySystemPrompt(laneCCalls(r)[0].body)
     && laneCBody(r).includes(`${nebulaCFirstPassMark(model)}\n`)
     && (model === 'gpt-6.2-sol' || laneCBody(r).includes(`\nHistorical review by ${model}\n`)));
 }
@@ -2424,6 +2434,7 @@ check('NebulaLab C: when Go is spent, one Luna request on CC is the final attemp
   && laneCCalls(r).map((call) => call.model).join(',') === 'gpt-6.2-sol,gpt-6.1-terra,gpt-6-luna,gpt-6-luna'
   && laneCCalls(r).map((call) => call.headers.authorization).join(',') === 'Bearer openai-test-key,Bearer openai-test-key,Bearer lane-a-key,Bearer cc-test-key'
   && laneCCalls(r).every((call) => call.body.reasoning?.effort === 'high')
+  && laneCCalls(r).slice(2).every(({ body }) => body.prompt_cache_options === undefined && body.input[0].role === 'system')
   && !laneCBody(r).includes('ai-pr-review-first-pass:v1 lane=C')
   && laneCBody(r).includes('## AI PR Review · Lane C · GPT-6 Luna')
   && laneCBody(r).includes('Lane C: gpt-6-luna via command-code (gpt-6.1-terra on openai unavailable)')
@@ -2447,6 +2458,7 @@ const openaiChat = structuredClone(nebulaConfig);
 delete openaiChat.lanes[2].first_pass;
 openaiChat.lanes[2].routes = openaiChat.lanes[2].routes.slice(0, 1);
 delete openaiChat.lanes[2].model.reasoning_effort;
+delete openaiChat.lanes[2].model.cache_system_prompt;
 openaiChat.lanes[2].model.id = 'kimi-k2.7-code';
 openaiChat.lanes[2].protocol = 'openai-chat-completions';
 r = await scenario(healthy, { ...openaiEgress, PR_REVIEW_CONFIG: JSON.stringify(openaiChat) });
@@ -2470,13 +2482,19 @@ check('spent OpenAI account indices never change the CC profile\'s first key', !
 const openaiTwoKeys = { ...openaiEgress, LANE_C_KEY: providerBundle({ openai: 'openai-one\nopenai-two', 'command-code': 'cc-test-key' }) };
 const laneCKeys = (result) => laneCCalls(result).map((call) => `${call.model}@${keyOf(call)}`).join(',');
 const leaksOpenaiKey = (result) => [...result.posted, ...result.statusUpdates, ...result.logs].some((text) => /openai-(one|two)/.test(text));
+const firstPassInputs = [];
 for (const number of [42, 43]) {
   r = await scenario(healthy, openaiTwoKeys, prNumbered(number));
+  firstPassInputs.push(laneCCalls(r)[0]?.body.input);
   check(`NebulaLab C: PR #${number} starts on the first of two OpenAI keys used in order`, !r.error
     && laneCKeys(r) === 'gpt-6.2-sol@openai-one' && laneCBody(r).includes('· key 1/2 ·')
     && r.logs.some((line) => line.includes(inOrderLog('C', number)))
     && !leaksOpenaiKey(r));
 }
+check('NebulaLab C: different PRs reuse the same Sol cache prefix with different PR context',
+  JSON.stringify(firstPassInputs[0]?.[0]) === JSON.stringify(firstPassInputs[1]?.[0])
+  && firstPassInputs[0]?.[1]?.content.includes('Pull Request: #42')
+  && firstPassInputs[1]?.[1]?.content.includes('Pull Request: #43'));
 const openaiSpent = () => reply(429, '{"error":{"code":"insufficient_quota","type":"insufficient_quota","message":"You exceeded your current quota, please check your plan and billing details."}}');
 for (const useBundle of [false, true]) {
   r = await scenario((call) => keyOf(call) === 'openai-one' ? openaiSpent() : healthy(call), openaiTwoKeys, prNumbered(43, { useBundle }));
@@ -2576,6 +2594,7 @@ check('last resort: Lane C asks GPT-6.1 Sol at high on OpenAI as the PR\'s first
   && laneRoutes(r, 'C') === 'gpt-6-luna@lane-c.cc,gpt-6-luna@lane-a.example,gpt-6.1-sol@lane-c.openai'
   && resortC.url === 'https://lane-c.openai.example.test/v1/responses' && resortC.headers.authorization === 'Bearer openai-test-key'
   && resortC.body.reasoning?.effort === 'high' && resortC.proxy === undefined
+  && resortC.body.prompt_cache_options === undefined && resortC.body.input[0].role === 'system'
   && resortCBody.includes('<!-- ai-pr-review-first-pass:v1 lane=C') && resortCBody.includes('model=gpt-6.1-sol') && resortCBody.includes('status=valid'));
 check('last resort: Lane A has none, and the two last resorts make the quorum', !r.error
   && laneRoutes(r, 'A') === 'muse-spark-1.3-contributor@lane-a.example,meta/muse-spark-1.3-contributor@lane-c.cc'

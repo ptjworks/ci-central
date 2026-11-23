@@ -77,6 +77,9 @@ var require_index = __commonJS({
     }
     function validateModelOptions(config, lane, model, location) {
       const protocol = model.protocol ?? lane.protocol;
+      if (model.cache_system_prompt !== void 0 && (protocol !== "openai-responses" || typeof model.cache_system_prompt !== "boolean")) {
+        throw new Error(`${location}.cache_system_prompt must be a boolean and requires openai-responses.`);
+      }
       if (model.reasoning_effort !== void 0 && (!["openai-responses", "openai-chat-completions"].includes(protocol) || !["none", "low", "medium", "high", "xhigh", "max"].includes(model.reasoning_effort))) {
         throw new Error(`${location}.reasoning_effort requires openai-responses or openai-chat-completions and a supported effort.`);
       }
@@ -1832,15 +1835,24 @@ ${googleDeepReviewContract}`), model.review_lane_id, laneMode(model));
       generationConfig
     };
   }
-  function responsesPayload(model) {
+  function responsesPayload(model, provider) {
     const chat = basePayload(model);
-    return {
+    const payload = {
       model: model.id,
       input: chat.messages,
       max_output_tokens: model.max_output_tokens,
       store: false,
       ...model.reasoning_effort ? { reasoning: { effort: model.reasoning_effort } } : {}
     };
+    if (provider === "openai" && model.cache_system_prompt) {
+      const [systemMessage, userMessage] = chat.messages;
+      payload.prompt_cache_options = { mode: "explicit" };
+      payload.input = [{
+        role: "developer",
+        content: [{ type: "input_text", text: systemMessage.content, prompt_cache_breakpoint: { mode: "explicit" } }]
+      }, userMessage];
+    }
+    return payload;
   }
   function anthropicPayload(model) {
     const throttled = model.context_profile === "kimi-k3-throttled";
@@ -1861,10 +1873,10 @@ ${googleDeepReviewContract}`), model.review_lane_id, laneMode(model));
     if (url.hostname === "opencode.ai" && /^\/zen\/go\/v1\/?$/.test(url.pathname)) url.pathname = "/inference/go/v1";
     return url.toString().replace(/\/+$/, "");
   }
-  function sdkPayload(lane, model) {
+  function sdkPayload(lane, model, provider) {
     const protocol = protocolOf(lane, model);
     const scoped = { ...model, review_lane_id: lane.id };
-    if (protocol === "openai-responses") return responsesPayload(scoped);
+    if (protocol === "openai-responses") return responsesPayload(scoped, provider);
     if (protocol === "anthropic-messages") return anthropicPayload(scoped);
     if (protocol === "google-generate-content") return { model: model.id, ...googlePayload(scoped) };
     const chat = basePayload(scoped);
@@ -1968,7 +1980,7 @@ ${requestError || ""}`;
         protocol,
         proxyUrl,
         sessionId: goRoute ? `${owner}-${repo}-pr-${pullNumber}-lane-${lane.id}${sessionSuffix}` : void 0,
-        payload: sdkPayload(lane, route.modelId === model.id ? model : { ...model, id: route.modelId }),
+        payload: sdkPayload(lane, route.modelId === model.id ? model : { ...model, id: route.modelId }, route.provider),
         signal: controller.signal,
         timeoutMs: windowMs,
         ...slowStream ? { slowStream } : {},

@@ -543,10 +543,19 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
     };
   }
 
-  function responsesPayload(model) {
+  function responsesPayload(model, provider) {
     const chat = basePayload(model);
-    return { model: model.id, input: chat.messages, max_output_tokens: model.max_output_tokens, store: false,
+    const payload = { model: model.id, input: chat.messages, max_output_tokens: model.max_output_tokens, store: false,
       ...(model.reasoning_effort ? { reasoning: { effort: model.reasoning_effort } } : {}) };
+    if (provider === 'openai' && model.cache_system_prompt) {
+      const [systemMessage, userMessage] = chat.messages;
+      payload.prompt_cache_options = { mode: 'explicit' };
+      payload.input = [{
+        role: 'developer',
+        content: [{ type: 'input_text', text: systemMessage.content, prompt_cache_breakpoint: { mode: 'explicit' } }],
+      }, userMessage];
+    }
+    return payload;
   }
 
   // Claude models think adaptively; effort is the only depth control.
@@ -574,10 +583,10 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
     if (url.hostname === 'opencode.ai' && /^\/zen\/go\/v1\/?$/.test(url.pathname)) url.pathname = '/inference/go/v1';
     return url.toString().replace(/\/+$/, '');
   }
-  function sdkPayload(lane, model) {
+  function sdkPayload(lane, model, provider) {
     const protocol = protocolOf(lane, model);
     const scoped = { ...model, review_lane_id: lane.id };
-    if (protocol === 'openai-responses') return responsesPayload(scoped);
+    if (protocol === 'openai-responses') return responsesPayload(scoped, provider);
     if (protocol === 'anthropic-messages') return anthropicPayload(scoped);
     if (protocol === 'google-generate-content') return { model: model.id, ...googlePayload(scoped) };
     const chat = basePayload(scoped);
@@ -730,7 +739,7 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
         proxyUrl,
         sessionId: goRoute
           ? `${owner}-${repo}-pr-${pullNumber}-lane-${lane.id}${sessionSuffix}` : undefined,
-        payload: sdkPayload(lane, route.modelId === model.id ? model : { ...model, id: route.modelId }),
+        payload: sdkPayload(lane, route.modelId === model.id ? model : { ...model, id: route.modelId }, route.provider),
         signal: controller.signal,
         timeoutMs: windowMs,
         ...(slowStream ? { slowStream } : {}),

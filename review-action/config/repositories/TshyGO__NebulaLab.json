@@ -96,6 +96,7 @@
         "label": "GPT-6.2 Sol",
         "context_profile": "full",
         "max_output_tokens": 65536,
+        "cache_system_prompt": true,
         "reporting_calibration": true,
         "reasoning_effort": "high"
       },
@@ -104,6 +105,7 @@
         "label": "GPT-6.1 Terra",
         "context_profile": "full",
         "max_output_tokens": 65536,
+        "cache_system_prompt": true,
         "reporting_calibration": true,
         "reasoning_effort": "high"
       },

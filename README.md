@@ -34,6 +34,8 @@ NebulaLab：
 | B | 首审 Claude Sonnet 5.5（effort xhigh，开报告校准），之后 Claude Haiku 5.5（effort high） | Anthropic（只经 szlab 台湾专用节点出口）→ Go → Command Code | 计入两路 quorum |
 | C | 首审 GPT-6.2 Sol（high），之后 GPT-6.1 Terra（high） | OpenAI（两个账号按顺序）→ Go 上的 GPT-6 Luna → Command Code 上的 GPT-6 Luna | advisory；有效时计入 quorum |
 
+NebulaLab 的 Lane C 直连 OpenAI 时只缓存固定审查规则，使用 Responses API 的显式断点和默认 30 分钟有效期。PR 描述和 diff 在断点之后。用运行日志里的 `input_tokens_details.cached_tokens` 和 `cache_write_tokens` 核对缓存收益。
+
 其余六个仓库（License-Service、resume、Thesis、Docs、Plugins、ci-central）：
 
 | Lane | 模型 | 尝试顺序 | 是否阻塞 |
