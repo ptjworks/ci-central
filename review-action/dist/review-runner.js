@@ -1835,7 +1835,7 @@ ${googleDeepReviewContract}`), model.review_lane_id, laneMode(model));
       generationConfig
     };
   }
-  function responsesPayload(model, provider) {
+  function responsesPayload(model, cacheSystemPrompt) {
     const chat = basePayload(model);
     const payload = {
       model: model.id,
@@ -1844,13 +1844,13 @@ ${googleDeepReviewContract}`), model.review_lane_id, laneMode(model));
       store: false,
       ...model.reasoning_effort ? { reasoning: { effort: model.reasoning_effort } } : {}
     };
-    if (provider === "openai" && model.cache_system_prompt) {
-      const [systemMessage, userMessage] = chat.messages;
+    const [systemMessage, ...laterMessages] = chat.messages;
+    if (cacheSystemPrompt && systemMessage?.role === "system" && typeof systemMessage.content === "string") {
       payload.prompt_cache_options = { mode: "explicit" };
       payload.input = [{
         role: "developer",
         content: [{ type: "input_text", text: systemMessage.content, prompt_cache_breakpoint: { mode: "explicit" } }]
-      }, userMessage];
+      }, ...laterMessages];
     }
     return payload;
   }
@@ -1873,12 +1873,15 @@ ${googleDeepReviewContract}`), model.review_lane_id, laneMode(model));
     if (url.hostname === "opencode.ai" && /^\/zen\/go\/v1\/?$/.test(url.pathname)) url.pathname = "/inference/go/v1";
     return url.toString().replace(/\/+$/, "");
   }
-  function sdkPayload(lane, model, provider) {
+  function sdkPayload(lane, model, route) {
     const protocol = protocolOf(lane, model);
-    const scoped = { ...model, review_lane_id: lane.id };
-    if (protocol === "openai-responses") return responsesPayload(scoped, provider);
+    const scoped = { ...model, id: route.modelId, review_lane_id: lane.id };
+    if (protocol === "openai-responses") {
+      const cacheSystemPrompt = route.provider === "openai" && route.modelId === model.id && model.cache_system_prompt;
+      return responsesPayload(scoped, cacheSystemPrompt);
+    }
     if (protocol === "anthropic-messages") return anthropicPayload(scoped);
-    if (protocol === "google-generate-content") return { model: model.id, ...googlePayload(scoped) };
+    if (protocol === "google-generate-content") return { model: scoped.id, ...googlePayload(scoped) };
     const chat = basePayload(scoped);
     return scoped.reasoning_effort ? { ...chat, reasoning_effort: scoped.reasoning_effort } : chat;
   }
@@ -1980,7 +1983,7 @@ ${requestError || ""}`;
         protocol,
         proxyUrl,
         sessionId: goRoute ? `${owner}-${repo}-pr-${pullNumber}-lane-${lane.id}${sessionSuffix}` : void 0,
-        payload: sdkPayload(lane, route.modelId === model.id ? model : { ...model, id: route.modelId }, route.provider),
+        payload: sdkPayload(lane, model, route),
         signal: controller.signal,
         timeoutMs: windowMs,
         ...slowStream ? { slowStream } : {},

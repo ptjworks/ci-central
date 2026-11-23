@@ -2376,11 +2376,12 @@ const laneCBody = (result) => result.posted.find((body) => body.startsWith('<!--
 const laneCCalls = (result) => result.captured.filter((call) => call.lane === 'C' || (call.lane === 'A' && call.model === 'gpt-6-luna'));
 const nebulaCFirstPassMark = (model) => `<!-- ai-pr-review-first-pass:v1 lane=C head=${H1} model=${model} -->`;
 const cachesOnlySystemPrompt = ({ prompt_cache_options: cache, input }) => {
+  if (cache?.mode !== 'explicit' || input?.length !== 2) return false;
   const [developer, user] = input;
+  if (developer.role !== 'developer' || !Array.isArray(developer.content) || developer.content.length !== 1) return false;
   const [system] = developer.content;
-  return cache?.mode === 'explicit' && input.length === 2 && developer.role === 'developer'
-    && developer.content.length === 1 && system?.type === 'input_text'
-    && system.text.includes('Review contract:') && system.prompt_cache_breakpoint?.mode === 'explicit'
+  return system.type === 'input_text' && system.text.includes('Review contract:')
+    && system.prompt_cache_breakpoint?.mode === 'explicit'
     && user.role === 'user' && typeof user.content === 'string' && user.content.includes('Changed files and patches:');
 };
 r = await scenario(healthy, openaiEgress, atHead(H1, { useBundle: true }));
@@ -2414,6 +2415,14 @@ for (const [model, firstPass] of [
     && (model === 'gpt-6.2-sol' || laneCBody(r).includes(`\nHistorical review by ${model}\n`)));
 }
 const openaiUnavailable = (call) => call.url.startsWith('https://lane-c.openai.');
+const openaiModelOverride = structuredClone(nebulaConfig);
+openaiModelOverride.lanes[2].routes = [{ provider: 'opencode-go' }, { provider: 'openai', id: 'gpt-6.1-sol' }];
+r = await scenario((call) => ['gpt-6.2-sol', 'gpt-6.1-terra'].includes(call.model) ? reply(503, 'unavailable') : healthy(call),
+  { ...openaiEgress, PR_REVIEW_CONFIG: JSON.stringify(openaiModelOverride) }, atHead(H1));
+const overriddenOpenaiRequest = r.captured.find(openaiUnavailable);
+check('NebulaLab C: an OpenAI route that replaces the model does not inherit the cache opt-in', !r.error
+  && overriddenOpenaiRequest?.model === 'gpt-6.1-sol'
+  && overriddenOpenaiRequest.body.prompt_cache_options === undefined && overriddenOpenaiRequest.body.input[0].role === 'system');
 const lunaOnLaneAGo = (call) => call.lane === 'A' && call.model === 'gpt-6-luna';
 r = await scenario((call) => openaiUnavailable(call) ? reply(503, 'unavailable') : healthy(call), openaiEgress);
 check('NebulaLab C: failed Sol tries Terra on OpenAI before Luna on Go', !r.error
