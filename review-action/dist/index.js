@@ -75,10 +75,6 @@ function keySlotFor(config, laneId, provider) {
 
 function validateModelOptions(config, lane, model, location) {
   const protocol = model.protocol ?? lane.protocol;
-  if (model.cache_system_prompt !== undefined
-    && (protocol !== 'openai-responses' || typeof model.cache_system_prompt !== 'boolean')) {
-    throw new Error(`${location}.cache_system_prompt must be a boolean and requires openai-responses.`);
-  }
   // Chat Completions takes the effort as a top-level `reasoning_effort` (DeepSeek V4.1 Flash on Go, 2026-11-20).
   if (model.reasoning_effort !== undefined && (!['openai-responses', 'openai-chat-completions'].includes(protocol)
     || !['none', 'low', 'medium', 'high', 'xhigh', 'max'].includes(model.reasoning_effort))) {

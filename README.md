@@ -34,8 +34,6 @@ NebulaLab：
 | B | 首审 Claude Sonnet 5.5（effort xhigh，开报告校准），之后 Claude Haiku 5.5（effort high） | Anthropic（只经 szlab 台湾专用节点出口）→ Go → Command Code | 计入两路 quorum |
 | C | 首审 GPT-6.2 Sol（high），之后 GPT-6.1 Terra（high） | OpenAI（两个账号按顺序）→ Go 上的 GPT-6 Luna → Command Code 上的 GPT-6 Luna | advisory；有效时计入 quorum |
 
-NebulaLab 的 Lane C 直连 OpenAI 时只缓存固定审查规则，使用 Responses API 的显式断点和默认 30 分钟有效期。PR 描述和 diff 在断点之后。用运行日志里的 `input_tokens_details.cached_tokens` 和 `cache_write_tokens` 核对缓存收益。
-
 其余六个仓库（License-Service、resume、Thesis、Docs、Plugins、ci-central）：
 
 | Lane | 模型 | 尝试顺序 | 是否阻塞 |
@@ -43,6 +41,15 @@ NebulaLab 的 Lane C 直连 OpenAI 时只缓存固定审查规则，使用 Respo
 | A | Muse Spark 1.3 Contributor（`xhigh`） | Go → Command Code | 计入两路 quorum |
 | B | Claude Haiku 5.5（effort high） | Go → Command Code → Anthropic（两家套餐都用完才发） | 计入两路 quorum |
 | C | DeepSeek V4.1 Flash（思考等级 high） | Go → Command Code → OpenAI（两家套餐都用完才发：PR 还没有首审时 GPT-6.1 Sol high，之后 GPT-6 Luna xhigh） | advisory；有效时计入 quorum |
+
+| 供应商 | 提示词缓存 |
+|---|---|
+| OpenAI | Sol、Terra 和 Luna 使用 Responses 显式断点，仅缓存固定审查规则，默认 30 分钟。 |
+| Anthropic | Sonnet 5.5 和 Haiku 5.5 在固定 `system` 文本块上设置 `cache_control`，默认 5 分钟。 |
+| OpenCode Go | 同一仓库、PR 和 Lane 使用稳定的 `x-opencode-session`；Haiku 和 Luna 使用各自协议的显式断点，Muse 和 DeepSeek 使用供应商的自动缓存。 |
+| Command Code | Haiku 和 Luna 使用兼容 API 的显式断点，Muse 和 DeepSeek 使用供应商的自动缓存。 |
+
+显式断点之后的 PR 上下文和 diff 按普通输入计费。SDK 的 `finished` 日志提供 `provider`、`cache_read_tokens` 和 `cache_write_tokens`，`null` 表示供应商未报告该项。各供应商的 `input_tokens` 口径可能不同，Anthropic Messages 的输入计数不含缓存读写。 [OpenAI](https://developers.openai.com/api/docs/guides/prompt-caching) · [Anthropic](https://platform.claude.com/docs/en/build-with-claude/prompt-caching) · [OpenCode Go](https://opencode.ai/docs/console/go/) · [Command Code](https://commandcode.ai/docs/provider)
 
 首审只发给表里的第一家，不跨供应商；首审失败时同一轮由模型按路由表审核且不写首审标记，下一个提交再试首审。实际由后面某家生成时，评论脚注和横幅写明是哪家、哪个模型 ID。Command Code 目前没有余额：用户 2026-11-18 决定 Go 用完之前不再开通。它的 400 “insufficient credits” 算额度用尽，所以 Go 用完时其余六个仓库的 B/C 会走到付费 API，A 发布诊断。七份配置均使用 `min_valid_lanes=2`，任何两路有效即可；绿色检查不能证明每条 Lane 都成功。
 

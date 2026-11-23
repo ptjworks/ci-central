@@ -99,7 +99,8 @@ for (const [name, implementation] of [
       res.write(frame({ type: 'response.output_text.delta', delta: '中文审核' }));
       res.write(frame({ type: 'response.completed', response: { status: 'completed', model: 'muse-spark-1.3-contributor',
         output: [{ type: 'reasoning', summary: [{ text: 'PRIVATE THOUGHT' }] },
-          { type: 'message', content: [{ type: 'output_text', text: '中文审核' }] }], usage: { input_tokens: 20 } } }));
+          { type: 'message', content: [{ type: 'output_text', text: '中文审核' }] }],
+        usage: { input_tokens: 20, input_tokens_details: { cached_tokens: 12, cache_write_tokens: 0 } } } }));
     });
     const result = JSON.parse(await (await f.invoke({ protocol: 'openai-responses', sessionId: 'repo-pr-877-lane-A',
       payload: { model: 'muse-spark-1.3-contributor', input: 'synthetic code', max_output_tokens: 16384, store: false } })).text());
@@ -107,6 +108,7 @@ for (const [name, implementation] of [
     assert.equal(result.choices[0].finish_reason, 'stop');
     assert.equal(result.reasoning_chars, 15);
     assert.equal(result.usage.input_tokens, 20);
+    assert.deepEqual([f.logs.at(-1).cache_read_tokens, f.logs.at(-1).cache_write_tokens], [12, 0]);
     assert.equal(f.calls[0].url, '/v1/B/responses');
     assert.equal(f.calls[0].headers.authorization, 'Bearer test-only-B');
     assert.equal(f.calls[0].headers['x-opencode-session'], 'repo-pr-877-lane-A');
@@ -359,7 +361,7 @@ for (const [name, implementation] of [
       res.write(frame(delta('final review', 'stop')));
       // One write: the [DONE] assertion must not depend on TCP segmentation.
       res.write(frame({ model: 'glm-5.3', choices: [], usage: { prompt_tokens: 120, completion_tokens: 45,
-        total_tokens: 165, completion_tokens_details: { reasoning_tokens: 30 } } }) + 'data: [DONE]\n\n');
+        total_tokens: 165, prompt_cache_hit_tokens: 64, completion_tokens_details: { reasoning_tokens: 30 } } }) + 'data: [DONE]\n\n');
       // Deliberately leave the connection open after the trailer.
     });
     const result = JSON.parse(await (await f.invoke()).text());
@@ -368,6 +370,7 @@ for (const [name, implementation] of [
     const finished = f.logs.at(-1);
     assert.equal(finished.usage_trailer, 'usage');
     assert.deepEqual([finished.input_tokens, finished.output_tokens, finished.reasoning_tokens], [120, 45, 30]);
+    assert.deepEqual([finished.cache_read_tokens, finished.cache_write_tokens], [64, null]);
     assert.equal(finished.last_event, 'finish');
     assert.equal(finished.done_marker, true);
     // Stopping after the trailer is our own cancellation, not a transport error.
@@ -665,7 +668,7 @@ for (const [name, implementation] of [
     output_config: { effort: 'high' }, messages: [{ role: 'user', content: 'synthetic code' }] };
   const anthropicStream = (stopReason, { text = '中文审核' } = {}) => [
     { type: 'message_start', message: { id: 'msg_test', type: 'message', role: 'assistant', model: 'claude-haiku-5-5', content: [],
-      stop_reason: null, usage: { input_tokens: 20, output_tokens: 1 } } },
+      stop_reason: null, usage: { input_tokens: 20, output_tokens: 1, cache_read_input_tokens: 512, cache_creation_input_tokens: 64 } } },
     { type: 'content_block_start', index: 0, content_block: { type: 'thinking', thinking: '', signature: '' } },
     { type: 'content_block_delta', index: 0, delta: { type: 'thinking_delta', thinking: 'PRIVATE THOUGHT' } },
     { type: 'content_block_delta', index: 0, delta: { type: 'signature_delta', signature: 'sig' } },
@@ -706,6 +709,7 @@ for (const [name, implementation] of [
     const finished = f.logs.find((entry) => entry.event === 'finished');
     assert.equal(finished.reasoning_tokens, 40);
     assert.equal(finished.input_tokens, 20);
+    assert.deepEqual([finished.cache_read_tokens, finished.cache_write_tokens], [512, 64]);
     assert.ok(!JSON.stringify([result, f.logs]).includes('PRIVATE THOUGHT'));
   });
   for (const [stopReason, expected] of [['max_tokens', 'length'], ['refusal', 'refusal']]) {

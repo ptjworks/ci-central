@@ -12,6 +12,11 @@ const { diffIdentity, changedSince, sinceReviewScope, encodeState, readState, co
 // requests from szlab, the review VMs' host, on 2026-11-18; DeepSeek V4.1 Flash: 24 on 2026-11-19).
 // Keep unknown models (including Muse) on the approved proxy; never retry across egress paths.
 const DIRECT_GO_MODELS = new Set(['kimi-k2.7-code', 'glm-5.3', 'hy3', 'minimax-m3.1-flash', 'deepseek-v4.1-flash']);
+// The served model and API determine the cache fields. Muse and DeepSeek use automatic caching.
+const OPENAI_CACHE_MODELS = new Set(['gpt-6.2-sol', 'gpt-6.1-sol', 'gpt-6.1-terra', 'gpt-6-luna']);
+const LUNA_CACHE_GATEWAYS = new Set(['opencode-go', 'command-code']);
+const CLAUDE_CACHE_MODELS = new Set(['claude-sonnet-5-5', 'claude-haiku-5-5']);
+const CLAUDE_CACHE_PROVIDERS = new Set(['anthropic', 'opencode-go', 'command-code']);
 // A slow stream is sent once more only when this much of its window is left; less cannot finish a review.
 const MIN_RESEND_WINDOW_MS = 60000;
 
@@ -559,12 +564,15 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
   }
 
   // Claude models think adaptively; effort is the only depth control.
-  function anthropicPayload(model) {
+  function anthropicPayload(model, cacheSystemPrompt) {
     const throttled = model.context_profile === 'kimi-k3-throttled';
+    const systemPrompt = buildSystemPrompt(calibrated(model, throttled ? kimiK3System : system), model.review_lane_id, laneMode(model));
     const payload = {
       model: model.id,
       max_tokens: model.max_output_tokens,
-      system: buildSystemPrompt(calibrated(model, throttled ? kimiK3System : system), model.review_lane_id, laneMode(model)),
+      system: cacheSystemPrompt
+        ? [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }]
+        : systemPrompt,
       messages: [{ role: 'user', content: contextFor(model).user }],
       thinking: { type: 'adaptive' },
     };
@@ -587,10 +595,14 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
     const protocol = protocolOf(lane, model);
     const scoped = { ...model, id: route.modelId, review_lane_id: lane.id };
     if (protocol === 'openai-responses') {
-      const cacheSystemPrompt = route.provider === 'openai' && route.modelId === model.id && model.cache_system_prompt;
+      const cacheSystemPrompt = (route.provider === 'openai' && OPENAI_CACHE_MODELS.has(route.modelId))
+        || (route.modelId === 'gpt-6-luna' && LUNA_CACHE_GATEWAYS.has(route.provider));
       return responsesPayload(scoped, cacheSystemPrompt);
     }
-    if (protocol === 'anthropic-messages') return anthropicPayload(scoped);
+    if (protocol === 'anthropic-messages') {
+      const cacheSystemPrompt = CLAUDE_CACHE_PROVIDERS.has(route.provider) && CLAUDE_CACHE_MODELS.has(route.modelId);
+      return anthropicPayload(scoped, cacheSystemPrompt);
+    }
     if (protocol === 'google-generate-content') return { model: scoped.id, ...googlePayload(scoped) };
     const chat = basePayload(scoped);
     return scoped.reasoning_effort ? { ...chat, reasoning_effort: scoped.reasoning_effort } : chat;
@@ -746,7 +758,7 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
         signal: controller.signal,
         timeoutMs: windowMs,
         ...(slowStream ? { slowStream } : {}),
-        onProgress: (progress) => console.log(`[Lane ${lane.id}/${route.modelId}] sdk=${JSON.stringify(progress)}`),
+        onProgress: (progress) => console.log(`[Lane ${lane.id}/${route.modelId}] sdk=${JSON.stringify({ ...progress, provider: route.provider })}`),
       });
       responseText = await response.text();
     } catch (error) {
