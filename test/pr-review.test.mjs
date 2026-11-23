@@ -506,10 +506,25 @@ async function scenario(route, overrides = {}, options = {}) {
 }
 
 // System and user text of a captured request, whatever its protocol.
-const systemText = (body) => body?.systemInstruction ? body.systemInstruction.parts[0].text
-  : typeof body?.system === 'string' ? body.system : (body?.input || body?.messages)?.[0]?.content;
+const systemText = (body) => {
+  if (body?.systemInstruction) return body.systemInstruction.parts[0].text;
+  const system = body?.system ?? (body?.input || body?.messages)?.[0]?.content;
+  return Array.isArray(system) ? system.map(({ text }) => text).join('\n') : system;
+};
 const userText = (body) => body?.contents ? body.contents[0].parts[0].text
-  : typeof body?.system === 'string' ? body.messages[0].content : (body?.input || body?.messages)?.[1]?.content;
+  : body?.system !== undefined ? body.messages[0].content : (body?.input || body?.messages)?.[1]?.content;
+const claudeCachesOnlySystem = (body) => body.system?.length === 1 && body.system[0].type === 'text'
+  && body.system[0].cache_control?.type === 'ephemeral' && body.cache_control === undefined
+  && typeof body.messages[0].content === 'string';
+const cachesOnlySystemPrompt = ({ prompt_cache_options: cache, input }) => {
+  if (cache?.mode !== 'explicit' || input?.length !== 2) return false;
+  const [developer, user] = input;
+  if (developer.role !== 'developer' || !Array.isArray(developer.content) || developer.content.length !== 1) return false;
+  const [system] = developer.content;
+  return system.type === 'input_text' && system.text.includes('Review contract:')
+    && system.prompt_cache_breakpoint?.mode === 'explicit'
+    && user.role === 'user' && typeof user.content === 'string' && user.content.includes('Changed files and patches:');
+};
 const checks = [];
 const check = (name, condition) => { checks.push(Boolean(condition)); console.log(`${condition ? 'ok  ' : 'FAIL'} ${name}`); };
 const healthy = ({ model, body }) => reply(200, body.contents
@@ -826,7 +841,7 @@ check('Lane C uses Command Code GPT-6 Luna over Responses without Google thinkin
   healthyLaneC?.model === 'gpt-6-luna'
   && healthyLaneC?.max_output_tokens === 65536
   && healthyLaneC?.store === false
-  && healthyLaneC?.input?.length === 2 && healthyLaneC.input[0].role === 'system' && healthyLaneC.input[1].role === 'user'
+  && cachesOnlySystemPrompt(healthyLaneC)
   && healthyLaneC?.messages === undefined
   && healthyLaneC?.max_tokens === undefined
   && healthyLaneC?.temperature === undefined
@@ -1266,7 +1281,7 @@ check('Lane C asks GPT-6 Luna on Go through the Lane A slot once, never another 
   && lunaCross?.url === 'https://lane-a.example.test/v1/responses' && lunaCross.headers.authorization === 'Bearer lane-a-key'
   && /-lane-C$/.test(lunaCross.headers['x-opencode-session'] || '') && lunaCross.body.max_output_tokens === 65536
   && lunaCross.body.store === false && lunaCross.body.max_tokens === undefined && lunaCross.body.messages === undefined
-  && lunaCross.body.input[0].content.includes('Reporting calibration')
+  && systemText(lunaCross.body).includes('Reporting calibration') && cachesOnlySystemPrompt(lunaCross.body)
   && JSON.stringify(lunaCross.body.input) === JSON.stringify(lunaOwn?.body.input)
   && lunaCross.proxy === undefined && r.logs.some((line) => line.includes('[Lane C/gpt-6-luna] egress=direct'))
   && r.captured.every(({ model }) => ['muse-spark-1.3-contributor', 'claude-haiku-5-5', 'gpt-6-luna'].includes(model))
@@ -1303,8 +1318,10 @@ for (const useBundle of [false, true]) {
     && overflowA?.url === 'https://lane-c.example.test/v1/responses' && overflowA.headers.authorization === 'Bearer lane-c-key'
     && overflowA.headers['x-opencode-session'] === undefined && Boolean(goA?.headers['x-opencode-session'])
     && JSON.stringify(overflowA.body.input) === JSON.stringify(goA.body.input) && overflowA.body.max_output_tokens === goA.body.max_output_tokens
+    && overflowA.body.prompt_cache_options === undefined && goA.body.prompt_cache_options === undefined
     && overflowB?.url === 'https://lane-c.example.test/v1/messages' && overflowB.headers['x-api-key'] === 'lane-c-key'
-    && overflowB.body.system === goB?.body.system && overflowB.body.messages[0].content === goB.body.messages[0].content
+    && claudeCachesOnlySystem(overflowB.body) && claudeCachesOnlySystem(goB.body)
+    && systemText(overflowB.body) === systemText(goB.body) && userText(overflowB.body) === userText(goB.body)
     && overflowB.body.output_config?.effort === 'high' && overflowB.body.max_tokens === 120000
     && !r.captured.some(({ model }) => /muse-spark-1\.2|kimi/i.test(model))
     && r.posted.filter((body) => body.includes('status=valid')).length === 3
@@ -1533,7 +1550,7 @@ const haikuCall = byModel(r, 'claude-haiku-5-5')[0];
 check('Claude Haiku uses Anthropic Messages with adaptive thinking, configured effort and the lane key',
   haikuCall?.url === 'https://opencode.ai/zen/go/v1/messages' && haikuCall.headers['x-api-key'] === 'lane-b-key'
   && haikuCall.body.thinking?.type === 'adaptive' && haikuCall.body.output_config?.effort === 'high'
-  && haikuCall.body.max_tokens === 65536 && typeof haikuCall.body.system === 'string' && haikuCall.body.system.length > 0
+  && haikuCall.body.max_tokens === 65536 && claudeCachesOnlySystem(haikuCall.body) && systemText(haikuCall.body).length > 0
   && haikuCall.body.messages?.length === 1 && haikuCall.body.messages[0].role === 'user'
   && haikuCall.body.messages[0].content.includes('Changed files and patches:') && haikuCall.body.temperature === undefined
   && /-lane-B$/.test(haikuCall.headers['x-opencode-session'] || ''));
@@ -1571,14 +1588,14 @@ for (const lane of uncalibratedConfig.lanes) delete lane.model.reporting_calibra
 uncalibratedConfig.lanes[1].model.reporting_calibration = true;
 r = await scenario(healthy, { ...goModelsEnv, PR_REVIEW_CONFIG: JSON.stringify(uncalibratedConfig) });
 check('reporting calibration follows the model flag across protocols',
-  byModel(r, 'claude-haiku-5-5')[0]?.body.system.includes('Reporting calibration: surface every plausible defect you traced')
+  systemText(byModel(r, 'claude-haiku-5-5')[0]?.body)?.includes('Reporting calibration: surface every plausible defect you traced')
   && !byModel(r, 'gemini-4-argon-contributor')[0]?.body.systemInstruction.parts[0].text.includes('Reporting calibration')
   && !byModel(r, 'muse-spark-1.3-contributor')[0]?.body.input[0].content.includes('Reporting calibration'));
 r = await scenario(healthy);
 check('production Muse and GPT-6 Luna are calibrated while Haiku is not',
   r.captured.find(({ lane }) => lane === 'A')?.body.input[0].content.includes('Reporting calibration: surface every plausible defect you traced')
-  && r.captured.find(({ lane }) => lane === 'C')?.body.input[0].content.includes('Reporting calibration: surface every plausible defect you traced')
-  && !r.captured.find(({ lane }) => lane === 'B')?.body.system.includes('Reporting calibration'));
+  && systemText(r.captured.find(({ lane }) => lane === 'C')?.body)?.includes('Reporting calibration: surface every plausible defect you traced')
+  && !systemText(r.captured.find(({ lane }) => lane === 'B')?.body)?.includes('Reporting calibration'));
 const goQuota = Object.assign(new Error('SDK request failed (http=429).'), { name: 'SDKRequestError', status: 429, httpStatus: 429,
   unserved: true, providerType: 'GoUsageLimitError' });
 r = await scenario((call) => { if (call.model === 'gemini-4-argon-contributor') throw goQuota; return healthy(call); }, goModelsEnv);
@@ -1836,7 +1853,7 @@ check('NebulaLab: the first review of a PR runs Sonnet 5.5 through the Taiwan eg
   && sonnetCall?.url === 'https://lane-b.example.test/v1/messages' && sonnetCall.headers['x-api-key'] === 'lane-b-key'
   && sonnetCall.proxy === 'http://192.168.122.1:17890' && sonnetCall.headers['x-opencode-session'] === undefined
   && sonnetCall.body.output_config?.effort === 'xhigh' && sonnetCall.body.max_tokens === 120000 && sonnetCall.body.thinking?.type === 'adaptive'
-  && sonnetCall.body.system.includes(calibrationClause)
+  && claudeCachesOnlySystem(sonnetCall.body) && systemText(sonnetCall.body).includes(calibrationClause)
   && r.logs.some((line) => line.includes('[Lane B/claude-sonnet-5-5] egress=tw-proxy'))
   && r.logs.some((line) => line.includes('[Lane B] this PR has no first-pass review yet'))
   && firstPassBody.includes('status=valid') && firstPassBody.includes('· Claude Sonnet 5.5 · 首审')
@@ -1851,7 +1868,8 @@ check('NebulaLab: later commits go to Haiku 5.5 and keep the first review folded
   && laneBCalls(r) === 'claude-haiku-5-5'
   && r.captured.find(({ model }) => model === 'claude-haiku-5-5')?.proxy === 'http://192.168.122.1:17890'
   && r.captured.filter(({ model }) => model === 'claude-haiku-5-5').every(({ body }) =>
-    body.output_config?.effort === 'high' && !body.system.includes('Reporting calibration:') && !body.system.includes(calibrationClause))
+    body.output_config?.effort === 'high' && claudeCachesOnlySystem(body)
+    && !systemText(body).includes('Reporting calibration:') && !systemText(body).includes(calibrationClause))
   && r.comments.filter(({ body }) => body.startsWith('<!-- ai-pr-review-bot:lane-B -->\n')).length === 1
   && followUpBody.includes(`head=${nextHead}`) && followUpBody.includes('## AI PR Review · Lane B · Claude Haiku 5.5\n')
   && followUpBody.includes(`<details><summary>首审 · Claude Sonnet 5.5 · 提交 ${headSha.slice(0, 7)}</summary>`)
@@ -2381,6 +2399,7 @@ check('NebulaLab C: GPT-6.2 Sol alone performs the first pass on OpenAI with hig
   && laneCCalls(r).length === 1 && laneCCalls(r)[0].model === 'gpt-6.2-sol'
   && laneCCalls(r)[0].body.reasoning?.effort === 'high'
   && laneCCalls(r)[0].headers.authorization === 'Bearer openai-test-key'
+  && cachesOnlySystemPrompt(laneCCalls(r)[0].body)
   && solFirst.includes(nebulaCFirstPassMark('gpt-6.2-sol'))
   && solFirst.includes('GPT-6.2 Sol') && solFirst.includes('status=valid'));
 const historicalCFirstPass = (model) => [
@@ -2400,10 +2419,19 @@ for (const [model, firstPass] of [
     && laneCCalls(r).map((call) => call.model).join(',') === 'gpt-6.1-terra'
     && laneCCalls(r)[0].headers.authorization === 'Bearer openai-test-key'
     && laneCCalls(r)[0].body.reasoning?.effort === 'high'
+    && cachesOnlySystemPrompt(laneCCalls(r)[0].body)
     && laneCBody(r).includes(`${nebulaCFirstPassMark(model)}\n`)
     && (model === 'gpt-6.2-sol' || laneCBody(r).includes(`\nHistorical review by ${model}\n`)));
 }
 const openaiUnavailable = (call) => call.url.startsWith('https://lane-c.openai.');
+const openaiModelOverride = structuredClone(nebulaConfig);
+openaiModelOverride.lanes[2].routes = [{ provider: 'opencode-go' }, { provider: 'openai', id: 'gpt-5.5' }];
+r = await scenario((call) => ['gpt-6.2-sol', 'gpt-6.1-terra'].includes(call.model) ? reply(503, 'unavailable') : healthy(call),
+  { ...openaiEgress, PR_REVIEW_CONFIG: JSON.stringify(openaiModelOverride) }, atHead(H1));
+const overriddenOpenaiRequest = r.captured.find(openaiUnavailable);
+check('NebulaLab C: an OpenAI route that replaces the model with an older model keeps the original payload', !r.error
+  && overriddenOpenaiRequest?.model === 'gpt-5.5'
+  && overriddenOpenaiRequest.body.prompt_cache_options === undefined && overriddenOpenaiRequest.body.input[0].role === 'system');
 const lunaOnLaneAGo = (call) => call.lane === 'A' && call.model === 'gpt-6-luna';
 r = await scenario((call) => openaiUnavailable(call) ? reply(503, 'unavailable') : healthy(call), openaiEgress);
 check('NebulaLab C: failed Sol tries Terra on OpenAI before Luna on Go', !r.error
@@ -2424,6 +2452,7 @@ check('NebulaLab C: when Go is spent, one Luna request on CC is the final attemp
   && laneCCalls(r).map((call) => call.model).join(',') === 'gpt-6.2-sol,gpt-6.1-terra,gpt-6-luna,gpt-6-luna'
   && laneCCalls(r).map((call) => call.headers.authorization).join(',') === 'Bearer openai-test-key,Bearer openai-test-key,Bearer lane-a-key,Bearer cc-test-key'
   && laneCCalls(r).every((call) => call.body.reasoning?.effort === 'high')
+  && laneCCalls(r).every(({ body }) => cachesOnlySystemPrompt(body))
   && !laneCBody(r).includes('ai-pr-review-first-pass:v1 lane=C')
   && laneCBody(r).includes('## AI PR Review · Lane C · GPT-6 Luna')
   && laneCBody(r).includes('Lane C: gpt-6-luna via command-code (gpt-6.1-terra on openai unavailable)')
@@ -2470,13 +2499,19 @@ check('spent OpenAI account indices never change the CC profile\'s first key', !
 const openaiTwoKeys = { ...openaiEgress, LANE_C_KEY: providerBundle({ openai: 'openai-one\nopenai-two', 'command-code': 'cc-test-key' }) };
 const laneCKeys = (result) => laneCCalls(result).map((call) => `${call.model}@${keyOf(call)}`).join(',');
 const leaksOpenaiKey = (result) => [...result.posted, ...result.statusUpdates, ...result.logs].some((text) => /openai-(one|two)/.test(text));
+const firstPassInputs = [];
 for (const number of [42, 43]) {
   r = await scenario(healthy, openaiTwoKeys, prNumbered(number));
+  firstPassInputs.push(laneCCalls(r)[0]?.body.input);
   check(`NebulaLab C: PR #${number} starts on the first of two OpenAI keys used in order`, !r.error
     && laneCKeys(r) === 'gpt-6.2-sol@openai-one' && laneCBody(r).includes('· key 1/2 ·')
     && r.logs.some((line) => line.includes(inOrderLog('C', number)))
     && !leaksOpenaiKey(r));
 }
+check('NebulaLab C: different PRs reuse the same Sol cache prefix with different PR context',
+  JSON.stringify(firstPassInputs[0]?.[0]) === JSON.stringify(firstPassInputs[1]?.[0])
+  && firstPassInputs[0]?.[1]?.content.includes('Pull Request: #42')
+  && firstPassInputs[1]?.[1]?.content.includes('Pull Request: #43'));
 const openaiSpent = () => reply(429, '{"error":{"code":"insufficient_quota","type":"insufficient_quota","message":"You exceeded your current quota, please check your plan and billing details."}}');
 for (const useBundle of [false, true]) {
   r = await scenario((call) => keyOf(call) === 'openai-one' ? openaiSpent() : healthy(call), openaiTwoKeys, prNumbered(43, { useBundle }));
@@ -2542,6 +2577,19 @@ const lastResortEnv = {
   LANE_C_KEY: providerBundle({ 'command-code': 'cc-test-key', openai: 'openai-test-key' }),
   LANE_C_API_BASE: providerBundle({ 'command-code': 'https://lane-c.cc.example.test/v1', openai: 'https://lane-c.openai.example.test/v1' }),
 };
+
+const liveLicenseConfig = repositoryConfig('NebulaGraph-License-Service');
+r = await scenario((call) => call.model === 'deepseek-v4.1-flash' ? reply(503, 'unavailable') : healthy(call),
+  { ...lastResortEnv, PR_REVIEW_CONFIG: JSON.stringify(liveLicenseConfig) },
+  { useBundle: true, context: { ...context, repo: { owner: 'TshyGO', repo: 'NebulaGraph-License-Service' } } });
+const deepSeekRoutes = r.captured.filter(({ model }) => model.includes('deepseek-v4.1-flash'));
+check('DeepSeek uses the Go session and automatic caching on both Chat Completions providers', !r.error
+  && deepSeekRoutes.length === 2 && deepSeekRoutes.every(({ url }) => url.endsWith('/chat/completions'))
+  && deepSeekRoutes.every(({ body }) => body.prompt_cache_options === undefined && body.messages[0].role === 'system')
+  && deepSeekRoutes[0].headers['x-opencode-session']?.endsWith('-lane-C')
+  && deepSeekRoutes[1].model === 'deepseek/deepseek-v4.1-flash'
+  && deepSeekRoutes[1].headers['x-opencode-session'] === undefined
+  && systemText(deepSeekRoutes[0].body) === systemText(deepSeekRoutes[1].body));
 const goSpent = () => reply(429, '{"error":{"type":"GoUsageLimitError","message":"Weekly usage limit reached."}}');
 // Command Code's reply to every model and protocol once its credits ran out (2026-11-03).
 const ccSpent = () => reply(400, '{"error":{"message":"You have insufficient credits to make this request. Please purchase more credits to continue using the service.","type":"invalid_request_error","code":"BAD_REQUEST"}}');
@@ -2569,6 +2617,7 @@ const resortCBody = lastLaneComment(r, 'C');
 check('last resort: with Go and Command Code both spent, Lane B asks Haiku once on Anthropic, directly from GitHub', !r.error
   && laneRoutes(r, 'B') === 'claude-haiku-5-5@lane-b.go,claude-haiku-5-5@lane-c.cc,claude-haiku-5-5@lane-b.anthropic'
   && resortB.url === 'https://lane-b.anthropic.example.test/v1/messages' && resortB.headers['x-api-key'] === 'anthropic-key-1'
+  && claudeCachesOnlySystem(resortB.body)
   && resortB.proxy === undefined && resortBBody.includes('status=valid')
   && resortBBody.includes('via anthropic (last resort: plan quotas spent) · key 1/2')
   && resortBBody.includes('两家套餐额度都已用完') && resortBBody.includes('opencode-go') && resortBBody.includes('command-code API 余额已用完'));
@@ -2576,6 +2625,7 @@ check('last resort: Lane C asks GPT-6.1 Sol at high on OpenAI as the PR\'s first
   && laneRoutes(r, 'C') === 'gpt-6-luna@lane-c.cc,gpt-6-luna@lane-a.example,gpt-6.1-sol@lane-c.openai'
   && resortC.url === 'https://lane-c.openai.example.test/v1/responses' && resortC.headers.authorization === 'Bearer openai-test-key'
   && resortC.body.reasoning?.effort === 'high' && resortC.proxy === undefined
+  && cachesOnlySystemPrompt(resortC.body)
   && resortCBody.includes('<!-- ai-pr-review-first-pass:v1 lane=C') && resortCBody.includes('model=gpt-6.1-sol') && resortCBody.includes('status=valid'));
 check('last resort: Lane A has none, and the two last resorts make the quorum', !r.error
   && laneRoutes(r, 'A') === 'muse-spark-1.3-contributor@lane-a.example,meta/muse-spark-1.3-contributor@lane-c.cc'
@@ -2588,6 +2638,7 @@ r = await scenario(bothSpent, lastResortEnv, { useBundle: true, comments: [{ bod
 check('last resort: after a Sol first pass, Lane C asks GPT-6 Luna at xhigh and keeps the first pass folded', !r.error
   && laneRoutes(r, 'C') === 'gpt-6-luna@lane-c.cc,gpt-6-luna@lane-a.example,gpt-6-luna@lane-c.openai'
   && r.captured.find((call) => call.url.startsWith('https://lane-c.openai.')).body.reasoning?.effort === 'xhigh'
+  && cachesOnlySystemPrompt(r.captured.find((call) => call.url.startsWith('https://lane-c.openai.')).body)
   && lastLaneComment(r, 'C').includes('model=gpt-6.1-sol') && lastLaneComment(r, 'C').includes('首审 · GPT-6.1 Sol'));
 
 r = await scenario((call) => call.url.startsWith('https://lane-c.openai.') && call.model === 'gpt-6.1-sol' ? reply(503, 'unavailable') : bothSpent(call), lastResortEnv);

@@ -75,6 +75,10 @@ function usageCounts(usage) {
   return {
     input_tokens: safeCount(usage?.prompt_tokens ?? usage?.input_tokens ?? usage?.promptTokenCount),
     output_tokens: safeCount(usage?.completion_tokens ?? usage?.output_tokens ?? geminiOutput),
+    cache_read_tokens: safeCount(usage?.cache_read_input_tokens ?? usage?.input_tokens_details?.cached_tokens
+      ?? usage?.prompt_tokens_details?.cached_tokens ?? usage?.prompt_cache_hit_tokens ?? usage?.cachedContentTokenCount),
+    cache_write_tokens: safeCount(usage?.cache_creation_input_tokens ?? usage?.input_tokens_details?.cache_write_tokens
+      ?? usage?.prompt_tokens_details?.cache_write_tokens),
     reasoning_tokens: safeCount(usage?.completion_tokens_details?.reasoning_tokens
       ?? usage?.output_tokens_details?.reasoning_tokens ?? usage?.output_tokens_details?.thinking_tokens
       ?? usage?.thoughtsTokenCount),
