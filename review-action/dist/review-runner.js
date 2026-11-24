@@ -801,7 +801,9 @@ var require_review_report = __commonJS({
       if (cursor < contentLen) segments.push([cursor, contentLen]);
       const outsideReports = [];
       for (const [segStart, segEnd] of segments) {
-        let start = segStart, depth = 0, inString = false, escaped = false;
+        const stack = [];
+        let nested = [];
+        let inString = false, escaped = false;
         for (let index = segStart; index < segEnd; index++) {
           const char = trimmed[index];
           if (inString) {
@@ -809,16 +811,38 @@ var require_review_report = __commonJS({
             else if (char === "\\") escaped = true;
             else if (char === '"') inString = false;
           } else if (char === "{") {
-            if (depth++ === 0) start = index;
-          } else if (depth > 0) {
+            stack.push(index);
+          } else if (stack.length) {
             if (char === '"') inString = true;
-            if (char === "}" && --depth === 0) {
-              const report = parseCandidate(trimmed.slice(start, index + 1), "json_candidate", start);
-              if (hasContractKeys(report)) outsideReports.push(report);
+            else if (char === "}") {
+              const open = stack.pop();
+              if (stack.length === 0) {
+                nested = [];
+                const report = parseCandidate(trimmed.slice(open, index + 1), "json_candidate", open);
+                if (hasContractKeys(report)) outsideReports.push(report);
+              } else {
+                nested.push([open, index + 1]);
+              }
             }
           }
         }
-        if (depth > 0) parseCandidate(trimmed.slice(start, segEnd), "json_candidate", start);
+        if (stack.length) {
+          const unclosed = stack[0];
+          const outermost = [];
+          for (const [open, close] of nested.sort((a, b) => a[0] - b[0])) {
+            if (outermost.length && close <= outermost.at(-1)[1]) continue;
+            outermost.push([open, close]);
+          }
+          let foundNested = false;
+          for (const [open, close] of outermost) {
+            const report = parseCandidate(trimmed.slice(open, close), "json_candidate", open);
+            if (hasContractKeys(report)) {
+              outsideReports.push(report);
+              foundNested = true;
+            }
+          }
+          if (!foundNested) parseCandidate(trimmed.slice(unclosed, segEnd), "json_candidate", unclosed);
+        }
       }
       const allReports = [...fencedReports, ...outsideReports];
       if (allReports.length > 1) reject("multi_object", "ambiguous_object");
@@ -2312,7 +2336,8 @@ ${requestError || ""}`;
     const quotaNotes = [];
     let onlyQuota = true;
     let lastNonQuota = null;
-    let primaryQuota = false;
+    let primaryHadQuota = false;
+    let primaryNonQuota = false;
     const quotaProviders = /* @__PURE__ */ new Set();
     let finalStage = null;
     let slowResendsLeft = first.slow_resend ? 1 : 0;
@@ -2330,7 +2355,18 @@ ${requestError || ""}`;
       const supplied = contextFor(model2, lane.id).pack;
       if (!supplied.coverage.some((file) => file.patch_available && file.supplied_hunks)) {
         onlyQuota = false;
+        if (!stage.lastResort) primaryNonQuota = true;
         lastOutcome = "no inspectable material for the configured context profile";
+        lastNonQuota = {
+          response: null,
+          responseText: "",
+          requestError: "",
+          failureKind: "no-material",
+          reportError: "",
+          outcome: lastOutcome,
+          provider: stage.lastResort ? paid.provider : first.provider,
+          closedStream: null
+        };
         tried.push(`${model2.id} -> ${lastOutcome} (0 attempt(s))`);
         return null;
       }
@@ -2368,7 +2404,6 @@ ${requestError || ""}`;
         lastFailureKind = failureKind2;
         lastOutcome = "";
         const quotaNote = outcome2.quota ? quotaWording(route.provider, outcome2.quota) : null;
-        if (!cross && !stage.lastResort) primaryQuota = Boolean(quotaNote);
         if (quotaNote) quotaProviders.add(route.provider);
         if (!cross) ownQuota = quotaNote;
         const quotaKey = outcome2.quota && `${route.provider}:${outcome2.quota.credit ? "credit" : outcome2.quota.window ?? "plan"}`;
@@ -2430,8 +2465,12 @@ ${requestError || ""}`;
           steps.push({ key, resend: { endsAt, totalMs: outcome2.windowMs, slow: { charsPerSecond: outcome2.slowChars, provider: route.provider } } });
           continue;
         }
-        if (!quotaNote) {
+        const onPrimaryRoute = !cross && !stage.lastResort;
+        if (quotaNote) {
+          if (onPrimaryRoute) primaryHadQuota = true;
+        } else {
           onlyQuota = false;
+          if (onPrimaryRoute) primaryNonQuota = true;
           lastNonQuota = {
             response: response2,
             responseText: responseText2,
@@ -2530,6 +2569,7 @@ ${requestError || ""}`;
     const fence = "```";
     const snippet = failText.replace(/`/g, "'").slice(0, 600);
     const quotaHeadlines = quotaNotes.map((note) => note.headline).join("\uFF1B");
+    const primaryQuota = primaryHadQuota && !primaryNonQuota;
     const fallbackOnlyQuota = quotaNotes.every((note) => note.provider !== first.provider);
     const quotaBanner = allQuota || primaryQuota ? `> \u26D4 \u989D\u5EA6\u7528\u5C3D\uFF0C\u4E0D\u662F\u9650\u6D41\uFF1A${quotaHeadlines}\u3002` : fallbackOnlyQuota ? `> \u2139\uFE0F \u5907\u7528\u4F9B\u5E94\u5546\u672A\u63A5\u4F4F\uFF1A${quotaHeadlines}\uFF1B\u672C\u8F6E\u4E3B\u5931\u8D25\u5E76\u975E\u989D\u5EA6\u7528\u5C3D\uFF0C\u89C1\u4E0B\u65B9\u3002` : `> \u2139\uFE0F \u90E8\u5206\u8D26\u53F7\u989D\u5EA6\u5DF2\u7528\u5B8C\uFF1A${quotaHeadlines}\uFF1B\u672C\u8F6E\u4E3B\u5931\u8D25\u5E76\u975E\u989D\u5EA6\u7528\u5C3D\uFF0C\u89C1\u4E0B\u65B9\u3002`;
     let quotaAction = "";
@@ -2558,7 +2598,7 @@ ${snippet}
 ${fence}
 </details>` : "",
       "",
-      quotaAction || (gatewayBlocked ? "Action needed: use an API base URL that GitHub-hosted runners can reach without browser verification, or run this workflow on a self-hosted runner." : failureKind === "authentication-failed" ? `Action needed: repair Lane ${lane.id} credentials or authentication configuration.` : failureKind === "endpoint-unavailable" ? `Action needed: Lane ${lane.id} endpoint remained unreachable after one attempt per configured model and route.` : upstreamExhausted ? `Action needed: \`failover_exhausted\` means Lane ${lane.id} ran out of healthy upstreams. Inspect its central repository config and provider health.` : outcome ? "Action needed: inspect finish_reason and token usage for the incomplete or empty final response. This is not an authentication/HTTP failure and does not by itself prove an input-context limit." : failureKind === "report-invalid" ? "Action needed: inspect the local report-contract reason above. This is a report-format or code-evidence issue, not an authentication or HTTP failure; no parameter-repair resend was made." : closedStream ? `Action needed: this is not a rate limit, quota or authentication failure. ${provider} accepted the request (HTTP ${closedStream.httpStatus}) and streamed for ${closedStream.seconds} s, then closed the stream before the model finished. Rerun with /review; a close at about the same time again points to a stream-length limit on that provider.` : isServerSide ? "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above \u2014 most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage." : "Action needed: inspect the upstream response above to identify the request or auth problem.")
+      quotaAction || (gatewayBlocked ? "Action needed: use an API base URL that GitHub-hosted runners can reach without browser verification, or run this workflow on a self-hosted runner." : failureKind === "authentication-failed" ? `Action needed: repair Lane ${lane.id} credentials or authentication configuration.` : failureKind === "endpoint-unavailable" ? `Action needed: Lane ${lane.id} endpoint remained unreachable after one attempt per configured model and route.` : upstreamExhausted ? `Action needed: \`failover_exhausted\` means Lane ${lane.id} ran out of healthy upstreams. Inspect its central repository config and provider health.` : failureKind === "no-material" ? "Action needed: no complete inspectable text patch fit the configured context profile for this lane. Inspect diff_char_budget and the coverage manifest." : outcome ? "Action needed: inspect finish_reason and token usage for the incomplete or empty final response. This is not an authentication/HTTP failure and does not by itself prove an input-context limit." : failureKind === "report-invalid" ? "Action needed: inspect the local report-contract reason above. This is a report-format or code-evidence issue, not an authentication or HTTP failure; no parameter-repair resend was made." : closedStream ? `Action needed: this is not a rate limit, quota or authentication failure. ${provider} accepted the request (HTTP ${closedStream.httpStatus}) and streamed for ${closedStream.seconds} s, then closed the stream before the model finished. Rerun with /review; a close at about the same time again points to a stream-length limit on that provider.` : isServerSide ? "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above \u2014 most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage." : "Action needed: inspect the upstream response above to identify the request or auth problem.")
     ].join("\n");
     return {
       lane,

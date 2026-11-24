@@ -199,7 +199,9 @@ function parseJsonReport(text) {
 
   const outsideReports = [];
   for (const [segStart, segEnd] of segments) {
-    let start = segStart, depth = 0, inString = false, escaped = false;
+    const stack = [];
+    let nested = [];
+    let inString = false, escaped = false;
     for (let index = segStart; index < segEnd; index++) {
       const char = trimmed[index];
       if (inString) {
@@ -207,16 +209,37 @@ function parseJsonReport(text) {
         else if (char === '\\') escaped = true;
         else if (char === '"') inString = false;
       } else if (char === '{') {
-        if (depth++ === 0) start = index;
-      } else if (depth > 0) {
+        stack.push(index);
+      } else if (stack.length) {
         if (char === '"') inString = true;
-        if (char === '}' && --depth === 0) {
-          const report = parseCandidate(trimmed.slice(start, index + 1), 'json_candidate', start);
-          if (hasContractKeys(report)) outsideReports.push(report);
+        else if (char === '}') {
+          const open = stack.pop();
+          if (stack.length === 0) {
+            nested = [];
+            const report = parseCandidate(trimmed.slice(open, index + 1), 'json_candidate', open);
+            if (hasContractKeys(report)) outsideReports.push(report);
+          } else {
+            nested.push([open, index + 1]);
+          }
         }
       }
     }
-    if (depth > 0) parseCandidate(trimmed.slice(start, segEnd), 'json_candidate', start);
+    if (stack.length) {
+      // Unclosed leading `{` in prose: keep only the outermost closed `{...}` spans inside it so
+      // a stray brace cannot swallow a bare JSON report, without double-counting nested objects.
+      const unclosed = stack[0];
+      const outermost = [];
+      for (const [open, close] of nested.sort((a, b) => a[0] - b[0])) {
+        if (outermost.length && close <= outermost.at(-1)[1]) continue;
+        outermost.push([open, close]);
+      }
+      let foundNested = false;
+      for (const [open, close] of outermost) {
+        const report = parseCandidate(trimmed.slice(open, close), 'json_candidate', open);
+        if (hasContractKeys(report)) { outsideReports.push(report); foundNested = true; }
+      }
+      if (!foundNested) parseCandidate(trimmed.slice(unclosed, segEnd), 'json_candidate', unclosed);
+    }
   }
   const allReports = [...fencedReports, ...outsideReports];
   if (allReports.length > 1) reject('multi_object', 'ambiguous_object');

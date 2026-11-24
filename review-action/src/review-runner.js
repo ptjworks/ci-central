@@ -959,7 +959,8 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
     const quotaNotes = [];
     let onlyQuota = true;
     let lastNonQuota = null;
-    let primaryQuota = false;
+    let primaryHadQuota = false;
+    let primaryNonQuota = false;
 
     // Every provider whose route reported a spent quota: the paid route serves only when every
     // plan route before it is spent.
@@ -996,7 +997,10 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
       const supplied = contextFor(model, lane.id).pack;
       if (!supplied.coverage.some(file => file.patch_available && file.supplied_hunks)) {
         onlyQuota = false;
+        if (!stage.lastResort) primaryNonQuota = true;
         lastOutcome = 'no inspectable material for the configured context profile';
+        lastNonQuota = { response: null, responseText: '', requestError: '', failureKind: 'no-material',
+          reportError: '', outcome: lastOutcome, provider: stage.lastResort ? paid.provider : first.provider, closedStream: null };
         tried.push(`${model.id} -> ${lastOutcome} (0 attempt(s))`);
         return null;
       }
@@ -1044,7 +1048,6 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
         lastFailureKind = failureKind;
         lastOutcome = '';
         const quotaNote = outcome.quota ? quotaWording(route.provider, outcome.quota) : null;
-        if (!cross && !stage.lastResort) primaryQuota = Boolean(quotaNote);
         if (quotaNote) quotaProviders.add(route.provider);
         if (!cross) ownQuota = quotaNote;
         // A plan that stopped several models of the lane is named once, with its first reset time:
@@ -1112,8 +1115,12 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
           steps.push({ key, resend: { endsAt, totalMs: outcome.windowMs, slow: { charsPerSecond: outcome.slowChars, provider: route.provider } } });
           continue;
         }
-        if (!quotaNote) {
+        const onPrimaryRoute = !cross && !stage.lastResort;
+        if (quotaNote) {
+          if (onPrimaryRoute) primaryHadQuota = true;
+        } else {
           onlyQuota = false;
+          if (onPrimaryRoute) primaryNonQuota = true;
           lastNonQuota = { response, responseText, requestError, failureKind: lastFailureKind, reportError: lastReportError,
             outcome: lastOutcome, provider: route.provider, closedStream: lastClosedStream };
         }
@@ -1204,6 +1211,7 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
     const fence = '```';
     const snippet = failText.replace(/`/g, "'").slice(0, 600);
     const quotaHeadlines = quotaNotes.map((note) => note.headline).join('；');
+    const primaryQuota = primaryHadQuota && !primaryNonQuota;
     const fallbackOnlyQuota = quotaNotes.every((note) => note.provider !== first.provider);
     const quotaBanner = allQuota || primaryQuota
       ? `> ⛔ 额度用尽，不是限流：${quotaHeadlines}。`
@@ -1245,6 +1253,8 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
           ? `Action needed: Lane ${lane.id} endpoint remained unreachable after one attempt per configured model and route.`
         : upstreamExhausted
           ? `Action needed: \`failover_exhausted\` means Lane ${lane.id} ran out of healthy upstreams. Inspect its central repository config and provider health.`
+        : failureKind === 'no-material'
+          ? 'Action needed: no complete inspectable text patch fit the configured context profile for this lane. Inspect diff_char_budget and the coverage manifest.'
         : outcome
           ? 'Action needed: inspect finish_reason and token usage for the incomplete or empty final response. This is not an authentication/HTTP failure and does not by itself prove an input-context limit.'
         : failureKind === 'report-invalid'

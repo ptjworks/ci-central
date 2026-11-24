@@ -206,6 +206,7 @@ test('JSON extraction accepts a BOM and observes escaped quotes and braces in st
   const json = JSON.stringify({ ...report, summary });
   assert.equal(parseReview(`\uFEFF  ${json}\n`, context).summary, summary);
   assert.equal(parseReview(`以下是审核结果：{other} ${json} 结束。`, context).summary, summary);
+  assert.equal(parseReview(`说明 { 结束 ${json}`, context).summary, summary);
 });
 test('multiple contract objects anywhere in the response are ambiguous', () => {
   const json = JSON.stringify(report);
@@ -215,6 +216,7 @@ test('multiple contract objects anywhere in the response are ambiguous', () => {
     `\`\`\`json\n${json}\n\`\`\`\n\n${json}`,
     `${json}\n\n\`\`\`json\n${json}\n\`\`\``,
     `\`\`\`js\n${json}\n\`\`\`\n\n\`\`\`json\n${json}\n\`\`\``,
+    `说明 { ${json} ${json}`,
   ]) {
     assert.throws(() => parseReview(input, context), /shape=multi_object, .*parse_error_pos=none, reason_class=ambiguous_object/);
   }

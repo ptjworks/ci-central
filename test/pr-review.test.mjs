@@ -1013,6 +1013,15 @@ check('a model whose actual context pack is empty is skipped on both providers w
   && r.captured.filter(call => call.lane === 'B').map(({ model }) => model).join() === 'kimi-k2.7-code'
   && r.posted.some(body => body.includes('lane=B') && body.includes('status=diagnostic')
     && body.includes('claude-haiku-5-5 -> no inspectable material for the configured context profile (0 attempt(s))')));
+r = await scenario((call) => call.model === 'kimi-k2.7-code'
+  ? reply(429, '{"error":{"type":"GoUsageLimitError","message":"weekly quota reached"}}') : healthy(call),
+  { PR_REVIEW_CONFIG: JSON.stringify(emptyThrottledConfig) }, { files: [patch('src/a.ts', 500), patch('tests/a.test.ts', 500)] });
+const emptyAfterQuota = r.posted.find((body) => body.includes('lane=B') && body.includes('status=diagnostic')) || '';
+check('an empty model context pack after a primary quota failure records its own no-material diagnostic', !r.error
+  && emptyAfterQuota.includes('> ℹ️ 部分账号额度已用完：') && !emptyAfterQuota.includes('⛔')
+  && emptyAfterQuota.includes('no inspectable material for the configured context profile')
+  && emptyAfterQuota.includes('Action needed: no complete inspectable text patch fit the configured context profile for this lane.')
+  && !emptyAfterQuota.includes('inspect finish_reason'));
 const validEvidence = ['A', 'B', 'C'].map((lane) => evidenceComment(lane));
 const quotedMarkers = validEvidence.map(item => ({ ...item }));
 quotedMarkers[0].body += '\nQuoted source: <!-- ai-pr-review-bot:lane-C -->';
@@ -2111,6 +2120,19 @@ check('the primary route ends on its second key non-quota failure even when its 
   && laneBBody(r).includes('> ℹ️ 部分账号额度已用完：') && !laneBBody(r).includes('⛔')
   && laneBBody(r).includes('Action needed: a 5xx originates from the model gateway/account')
   && laneBKeys(r).endsWith('claude-haiku-5-5@anthropic-key-2'));
+r = await scenario((call) => call.lane === 'B'
+  ? keyOf(call) === 'anthropic-key-1' ? reply(429, '{"type":"error","error":{"type":"rate_limit_error","message":"too many requests per minute"}}') : billing()
+  : call.model === 'claude-haiku-5-5' ? Promise.reject(ccCreditError) : healthy(call), twoKeys);
+check('a primary route with a rate-limited first key and spent second key stays non-quota regardless of order', !r.error
+  && laneBBody(r).includes('> ℹ️ 部分账号额度已用完：') && !laneBBody(r).includes('⛔')
+  && laneBBody(r).includes('rate_limit_error')
+  && !laneBBody(r).includes('plan quota'));
+r = await scenario((call) => call.lane === 'B'
+  ? call.model === 'claude-sonnet-5-5' ? reply(503, '{"error":"overloaded"}') : billing()
+  : call.model === 'claude-haiku-5-5' ? Promise.reject(ccCreditError) : healthy(call), twEgress);
+check('a primary route with a 5xx first pass and spent primary model stays non-quota regardless of order', !r.error
+  && laneBBody(r).includes('> ℹ️ 部分账号额度已用完：') && !laneBBody(r).includes('⛔')
+  && laneBBody(r).includes('Action needed: a 5xx originates from the model gateway/account'));
 
 // ci-central#73 review (C2/B5/A3): a cross-provider request uses the target slot's first key, even
 // after the target lane spent that key in the same run, so the account never depends on lane timing.
