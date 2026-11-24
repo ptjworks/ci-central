@@ -46,6 +46,43 @@ function buildSystemPrompt(repositoryPrompt, lane, { incremental = false } = {})
   ].filter(Boolean).join('\n\n');
 }
 
+function reviewJsonSchema({ incremental = false } = {}) {
+  const properties = {
+    summary: { type: 'string', description: schema.summary },
+    reviewed_files: { type: 'array', items: { type: 'string' }, description: schema.reviewed_files[0] },
+    findings: { type: 'array', items: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        priority: { type: 'string', enum: ['P0', 'P1', 'P2'] },
+        file: { type: 'string' },
+        side: { type: 'string', enum: ['new', 'old'] },
+        line: { type: 'integer' },
+        title: { type: 'string' },
+        trigger: { type: 'string' },
+        impact: { type: 'string' },
+        evidence: { type: 'string', description: '从已提供 diff 或源码复制的精确代码片段；JSON 字符串内的双引号与反斜杠必须正确转义' },
+        suggestion: { type: 'string' },
+        confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
+      },
+      required: ['priority', 'file', 'side', 'line', 'title', 'trigger', 'impact', 'evidence', 'suggestion', 'confidence'],
+    } },
+    limitations: { type: 'array', items: { type: 'string' }, description: schema.limitations[0] },
+  };
+  if (incremental) {
+    properties.previous_findings = { type: 'array', items: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        id: { type: 'string' },
+        status: { type: 'string', enum: ['fixed', 'still_present', 'answered', 'unclear'] },
+        reason: { type: 'string' },
+      },
+      required: ['id', 'status', 'reason'],
+    } };
+  }
+  return { name: incremental ? 'review_report_incremental' : 'review_report',
+    schema: { type: 'object', additionalProperties: false, properties, required: Object.keys(properties) } };
+}
+
 const VERDICTS = { fixed: 'fixed', still_present: 'still_present', 'still present': 'still_present', present: 'still_present',
   open: 'still_present', answered: 'answered', unclear: 'unclear', '已修复': 'fixed', '仍存在': 'still_present',
   '已答复': 'answered', '不确定': 'unclear' };
@@ -93,21 +130,106 @@ function quoteLocations(lines, firstLine, quote) {
   return matches;
 }
 
+const isJsonObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
+const hasContractKeys = (value) => isJsonObject(value)
+  && ['summary', 'reviewed_files', 'findings', 'limitations'].every((key) => Object.hasOwn(value, key));
+
+const JSON_ERROR_CLASSES = [
+  [/Unterminated string/i, 'unterminated_string'],
+  [/Bad control character/i, 'bad_control_char'],
+  [/Bad escaped character/i, 'bad_escape'],
+  [/after property value/i, 'after_property_value'],
+  [/Expected (?:double-quoted )?property name/i, 'expected_property_name'],
+  [/Unexpected end of JSON/i, 'unexpected_end'],
+  [/Unexpected token/i, 'unexpected_token'],
+];
+function classifyJsonError(error, baseOffset = 0) {
+  // V8 may include model text in its error message. Keep only a class and character offset.
+  const position = /\bat position (\d+)\b(?: \(line \d+ column \d+\))?$/.exec(error.message)?.[1];
+  return {
+    parseErrorPos: position === undefined ? 'none' : baseOffset + Number(position),
+    reasonClass: JSON_ERROR_CLASSES.find(([pattern]) => pattern.test(error.message))?.[1] ?? 'syntax',
+  };
+}
+
 function parseJsonReport(text) {
-  const trimmed = text.trim().replace(/^```(?:json)?\s*\n([\s\S]*?)\n```\s*$/, '$1');
-  try { return JSON.parse(trimmed); } catch { /* try the enclosed object below */ }
-  // Models sometimes wrap the object in a sentence or a fence; only the object is used.
-  const start = trimmed.indexOf('{');
-  const end = trimmed.lastIndexOf('}');
-  if (start >= 0 && end > start) {
-    try { return JSON.parse(trimmed.slice(start, end + 1)); } catch { /* rejected below */ }
+  const trimmed = text.replace(/^\uFEFF/, '').trim();
+  const contentLen = trimmed.length;
+  const startsWithBrace = trimmed.startsWith('{');
+  const hasFence = /```/.test(trimmed);
+  function reject(shape, reasonClass, parseErrorPos = 'none') {
+    throw new Error(`Review contract: response is not a JSON report (shape=${shape}, starts_with_brace=${startsWithBrace}, has_fence=${hasFence}, content_len=${contentLen}, parse_error_pos=${parseErrorPos}, reason_class=${reasonClass}).`);
   }
-  throw new Error('Review contract: response is not a JSON report.');
+  let failure;
+  function parseCandidate(candidate, shape, baseOffset) {
+    try { return JSON.parse(candidate); } catch (error) {
+      if (shape && !failure) failure = { shape, ...classifyJsonError(error, baseOffset) };
+      return undefined;
+    }
+  }
+  const direct = parseCandidate(trimmed, startsWithBrace ? 'json_candidate' : null, 0);
+  if (direct !== undefined) return direct;
+
+  const wholeFence = /^```(?:json)?[ \t]*\r?\n([\s\S]*?)\r?\n```\s*$/i.exec(trimmed);
+  if (wholeFence && !/^[ \t]*```/m.test(wholeFence[1])) {
+    const report = parseCandidate(wholeFence[1], 'fenced', trimmed.indexOf('\n') + 1);
+    if (report !== undefined) return report;
+  }
+
+  const fencedObjects = [];
+  const checkedSpans = [];
+  for (const block of trimmed.matchAll(/^```([a-z0-9_-]*)[ \t]*\r?\n([\s\S]*?)\r?\n```[ \t]*$/gim)) {
+    if (block[1] && block[1].toLowerCase() !== 'json') continue;
+    checkedSpans.push([block.index, block.index + block[0].length]);
+    const report = parseCandidate(block[2], 'fenced', block.index + block[0].indexOf('\n') + 1);
+    if (isJsonObject(report)) fencedObjects.push(report);
+  }
+  const fencedReports = fencedObjects.filter(hasContractKeys);
+  if (fencedReports.length > 1) reject('multi_object', 'ambiguous_object');
+
+  // Scan segments outside checked fences independently so a second report anywhere else
+  // (raw JSON or another fenced block) is rejected as ambiguous instead of silently ignored.
+  const segments = [];
+  let cursor = 0;
+  for (const [spanStart, spanEnd] of checkedSpans) {
+    if (spanStart > cursor) segments.push([cursor, spanStart]);
+    cursor = spanEnd;
+  }
+  if (cursor < contentLen) segments.push([cursor, contentLen]);
+
+  const outsideReports = [];
+  for (const [segStart, segEnd] of segments) {
+    let start = segStart, depth = 0, inString = false, escaped = false;
+    for (let index = segStart; index < segEnd; index++) {
+      const char = trimmed[index];
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (char === '\\') escaped = true;
+        else if (char === '"') inString = false;
+      } else if (char === '{') {
+        if (depth++ === 0) start = index;
+      } else if (depth > 0) {
+        if (char === '"') inString = true;
+        if (char === '}' && --depth === 0) {
+          const report = parseCandidate(trimmed.slice(start, index + 1), 'json_candidate', start);
+          if (hasContractKeys(report)) outsideReports.push(report);
+        }
+      }
+    }
+    if (depth > 0) parseCandidate(trimmed.slice(start, segEnd), 'json_candidate', start);
+  }
+  const allReports = [...fencedReports, ...outsideReports];
+  if (allReports.length > 1) reject('multi_object', 'ambiguous_object');
+  if (allReports.length === 1) return allReports[0];
+  if (fencedObjects.length === 1) return fencedObjects[0];
+  if (contentLen === 0) reject('empty', 'unexpected_end');
+  if (failure) reject(failure.shape, failure.reasonClass, failure.parseErrorPos);
+  reject('prose', 'no_object');
 }
 
 function parseReview(text, context, { previous } = {}) {
   const report = parseJsonReport(text);
-  if (!report || typeof report !== 'object' || Array.isArray(report)) throw new Error('Review contract: report is not an object.');
+  if (!isJsonObject(report)) throw new Error('Review contract: report is not an object.');
   const summary = plain(report.summary, 'summary', 800);
   if (!Array.isArray(report.reviewed_files) || !Array.isArray(report.findings) || !Array.isArray(report.limitations)
       || report.findings.length > 100 || report.limitations.length > 100) throw new Error('Review contract: invalid arrays.');
@@ -285,4 +407,4 @@ function renderPartialReview(text, context) {
   }
 }
 
-module.exports = { PROMPT_VERSION, buildSystemPrompt, parseReview, renderReview, renderPartialReview };
+module.exports = { PROMPT_VERSION, buildSystemPrompt, reviewJsonSchema, parseReview, renderReview, renderPartialReview };

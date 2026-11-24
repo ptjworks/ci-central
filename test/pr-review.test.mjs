@@ -2,11 +2,13 @@
 // Executes the real inline workflow script against mocked GitHub and HTTP APIs.
 import fs from 'node:fs';
 import { createHash } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 const localRequire = createRequire(import.meta.url);
 const runner = localRequire('../review-action/src/review-runner.js');
 const bundledRunner = localRequire('../review-action/dist/review-runner.js');
+const { reviewJsonSchema } = localRequire('../review-action/src/review-report.js');
 import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -822,6 +824,9 @@ check('healthy path never crosses to the other provider', r.captured.length === 
 const healthyLaneA = r.captured.find(({ lane }) => lane === 'A')?.body;
 const healthyLaneB = r.captured.find(({ lane }) => lane === 'B')?.body;
 const healthyLaneC = r.captured.find(({ lane }) => lane === 'C')?.body;
+const fullReportSchema = reviewJsonSchema();
+const fullResponsesFormat = { type: 'json_schema', strict: true, ...fullReportSchema };
+const fullMessagesFormat = { type: 'json_schema', schema: fullReportSchema.schema };
 check('non-NebulaLab Responses payloads ask Muse at xhigh and Luna at high',
   healthyLaneA?.reasoning?.effort === 'xhigh' && healthyLaneC?.reasoning?.effort === 'high');
 const reviewPolicyPrefix = centralConfig.review_policy.system_prompt.split('Return concise Markdown')[0].trim();
@@ -842,6 +847,8 @@ check('Lane C uses Command Code GPT-6 Luna over Responses without Google thinkin
   && healthyLaneC?.max_output_tokens === 65536
   && healthyLaneC?.store === false
   && cachesOnlySystemPrompt(healthyLaneC)
+  && isDeepStrictEqual(healthyLaneC.text?.format, fullResponsesFormat)
+  && healthyLaneC.response_format === undefined
   && healthyLaneC?.messages === undefined
   && healthyLaneC?.max_tokens === undefined
   && healthyLaneC?.temperature === undefined
@@ -852,7 +859,9 @@ check('Lane B uses Claude Haiku with adaptive thinking, high effort and its outp
   && healthyLaneB?.temperature === undefined
   && healthyLaneB?.max_tokens === 120000
   && healthyLaneB?.thinking?.type === 'adaptive'
-  && healthyLaneB?.output_config?.effort === 'high');
+  && healthyLaneB?.output_config?.effort === 'high'
+  && claudeCachesOnlySystem(healthyLaneB)
+  && isDeepStrictEqual(healthyLaneB.output_config.format, fullMessagesFormat));
 check('each healthy lane publishes exactly one stable lane comment', r.posted.length === 3
   && ['A', 'B', 'C'].every((lane) => r.posted.filter((body) => body.includes(`<!-- ai-pr-review-bot:lane-${lane} -->`)).length === 1));
 check('healthy comments carry reusable v2 evidence for the full head and workflow SHAs', ['A', 'B', 'C'].every((lane) =>
@@ -962,13 +971,14 @@ check('every lane keeps exactly one request per model and route', !r.error
 // as a rate limit or an auth problem. Lane C's GPT-6 Luna, over Responses, takes the same route.
 const closedStream = Object.assign(new Error('SDK request failed (code=REVIEW_INCOMPLETE_STREAM, http=200, end=clean_close, last_event=response.reasoning_text.delta, idle_before_end_ms=2616).'),
   { name: 'SDKRequestError', code: 'REVIEW_INCOMPLETE_STREAM', httpStatus: 200, unserved: false });
+const closedStreamAttempt = /gpt-6-luna via opencode-go gpt-6-luna -> HTTP 200, stream closed before the model finished after \d+ s \(1 attempt\(s\)\)/;
 r = await scenario((call) => lunaOnCommandCode(call)
   ? Promise.reject(unserved(429, { providerType: 'rate_limit_error', providerCode: 'RATE_LIMITED' }))
   : lunaOnGo(call) ? Promise.reject(closedStream) : healthy(call));
 const closedStreamComment = r.posted.find((body) => body.includes('lane=C') && body.includes('status=diagnostic')) || '';
 check('a stream closed before the model finished is named as such, not as a failed request or an auth problem', !r.error
   && closedStreamComment.includes('Tried: gpt-6-luna -> HTTP 429 (1 attempt(s)); ')
-  && /gpt-6-luna via opencode-go gpt-6-luna -> HTTP 200, stream closed before the model finished after \d+ s \(1 attempt\(s\)\)/.test(closedStreamComment)
+  && closedStreamAttempt.test(closedStreamComment)
   && closedStreamComment.includes('this is not a rate limit, quota or authentication failure. opencode-go accepted the request (HTTP 200)')
   && !closedStreamComment.includes('HTTP request failed') && !closedStreamComment.includes('request or auth problem'));
 // A stale config that still asks for the resend fails before dispatch rather than silently losing it.
@@ -1356,6 +1366,62 @@ const quotaError = ({ status = 429, code = 'RATE_LIMITED', type = 'rate_limit_er
 const commandCodeWeekly = quotaError({ window: 'weekly', resetAt: '2026-10-22T08:56:41.040Z' });
 const goWeekly = quotaError({ code: undefined, type: 'GoUsageLimitError', window: 'weekly', resetAt: '2026-10-20T03:30:00.000Z' });
 const laneComment = (result, lane) => result.posted.filter((body) => body.includes(`lane=${lane}`)).at(-1) || '';
+r = await scenario((call) => lunaOnCommandCode(call) ? Promise.reject(commandCodeWeekly)
+  : lunaOnGo(call) ? Promise.reject(closedStream) : healthy(call));
+check('a closed stream is the actionable failure after the primary plan quota is exhausted', !r.error
+  && closedStreamAttempt.test(laneComment(r, 'C'))
+  && laneComment(r, 'C').includes('this is not a rate limit, quota or authentication failure. opencode-go accepted the request (HTTP 200)'));
+
+const ccCreditError = Object.assign(unserved(400, { providerType: 'invalid_request_error', providerCode: 'BAD_REQUEST' }),
+  { creditExhausted: true });
+const rejectedModelText = '# MODEL_TEXT_MARKER\nPrivate PR code DIFF_MARKER';
+const nonJsonReport = () => reply(200, JSON.stringify({ choices: [{ finish_reason: 'stop',
+  message: { content: rejectedModelText, reasoning_content: 'THINKING_MARKER' } }] }));
+const withGoFailureAndCcCredit = (failure) => (call) => call.lane === 'A' ? failure()
+  : call.model === 'meta/muse-spark-1.3-contributor' ? Promise.reject(ccCreditError) : healthy(call);
+for (const useBundle of [false, true]) {
+  r = await scenario(withGoFailureAndCcCredit(nonJsonReport), {}, { useBundle });
+  const nonJson = laneComment(r, 'A');
+  const details = nonJson.split('<details>')[1]?.split('</details>')[0] ?? '';
+  check(`source/bundle ${useBundle} Go report rejection remains the primary diagnostic when Command Code is out of credit`, !r.error
+    && nonJson.includes('> ℹ️ 备用供应商未接住：') && !nonJson.includes('⛔')
+    && details.includes(`shape=prose, starts_with_brace=false, has_fence=false, content_len=${rejectedModelText.length}, parse_error_pos=none, reason_class=no_object`)
+    && !details.includes('"credit":"exhausted"')
+    && nonJson.includes('Action needed: inspect the local report-contract reason above.')
+    && !nonJson.includes('plan quota')
+    && r.statusUpdates.at(-1).includes('审核未生成（opencode-go 的报告未通过证据校验；command-code API 余额已用完）')
+    && ![...r.posted, ...r.statusUpdates, ...r.logs].some((line) => /MODEL_TEXT_MARKER|DIFF_MARKER|THINKING_MARKER/.test(line)));
+
+  r = await scenario(withGoFailureAndCcCredit(() => Promise.reject(unserved(503, { providerType: 'upstream_unavailable' }))), {}, { useBundle });
+  const outage = laneComment(r, 'A');
+  const outageDetails = outage.split('<details>')[1]?.split('</details>')[0] ?? '';
+  check(`source/bundle ${useBundle} Go 503 remains the primary diagnostic when Command Code is out of credit`, !r.error
+    && outage.includes('> ℹ️ 备用供应商未接住：') && !outage.includes('⛔')
+    && outageDetails.includes('upstream_unavailable') && !outageDetails.includes('"credit":"exhausted"')
+    && outage.includes('Action needed: a 5xx originates from the model gateway/account')
+    && r.statusUpdates.at(-1).includes('审核未生成（opencode-go HTTP 503；command-code API 余额已用完）'));
+
+  r = await scenario(withGoFailureAndCcCredit(() => Promise.reject(goWeekly)), {}, { useBundle });
+  const mixedQuota = laneComment(r, 'A');
+  check(`source/bundle ${useBundle} a Go plan limit and Command Code credit exhaustion are named separately`, !r.error
+    && mixedQuota.includes('> ⛔ 额度用尽，不是限流：')
+    && mixedQuota.includes('the opencode-go plan quota is exhausted')
+    && mixedQuota.includes('the command-code API credit balance is exhausted')
+    && !mixedQuota.includes('the command-code plan quota')
+    && mixedQuota.includes('Wait for the plan quota to reset or add API credit'));
+
+  r = await scenario((call) => lunaOnCommandCode(call) ? Promise.reject(ccCreditError) : healthy(call),
+    { PR_REVIEW_CONFIG: JSON.stringify(noCrossConfig) }, { useBundle });
+  const creditOnly = laneComment(r, 'C');
+  check(`source/bundle ${useBundle} a lone Command Code credit failure gives API credit guidance`, !r.error
+    && creditOnly.includes('> ⛔ 额度用尽，不是限流：')
+    && creditOnly.includes('Action needed: the command-code API credit balance is exhausted.')
+    && creditOnly.includes('not a periodic plan quota'));
+}
+r = await scenario(withGoFailureAndCcCredit(() => reply(200, chatResult('muse-spark-1.3-contributor', ''))));
+check('an empty primary result still withholds the provider envelope from the diagnostic',
+  laneComment(r, 'A').includes('empty final response') && laneComment(r, 'A').includes('Action needed: inspect finish_reason')
+  && ![...r.posted, ...r.statusUpdates, ...r.logs].some((line) => line.includes('private thinking')));
 for (const useBundle of [false, true]) {
   r = await scenario((call) => lunaOnCommandCode(call) ? Promise.reject(commandCodeWeekly)
     : lunaOnGo(call) ? reply(503, '{"error":"unavailable"}') : healthy(call), {}, { useBundle });
@@ -2030,13 +2096,21 @@ r = await scenario((call) => call.lane === 'B' ? billing() : healthy(call), { ..
 check('NebulaLab: with both keys out of credit and no Lane C slot the comment says every key is spent',
   laneBBody(r).includes('status=diagnostic') && laneBBody(r).includes('every key in the Lane B slot') && !leaksKey(r));
 // ci-central#73 review (C1): a refused key is not a spent credit, so the lane must not claim every key is out of credit.
-// Key 1 is out of credit and key 2 refused; Haiku then ends on key 1, the first key once every key failed.
+// Key 1 is out of credit and key 2 refused; Haiku then ends on key 1, but the first non-quota failure leads.
 r = await scenario((call) => call.lane !== 'B' ? healthy(call) : keyOf(call) === 'anthropic-key-2'
   ? reply(401, '{"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}') : billing(),
 { ...twoKeys, LANE_C_KEY: '', LANE_C_API_BASE: '' }, prNumbered(44));
 check('NebulaLab: one key refused and one out of credit is not reported as every key out of credit',
   laneBBody(r).includes('status=diagnostic') && laneBKeys(r).endsWith('claude-haiku-5-5@anthropic-key-1')
-  && laneBBody(r).includes('Anthropic API credit balance is exhausted') && !laneBBody(r).includes('every key in the Lane B slot'));
+  && laneBBody(r).includes('anthropic credit balance exhausted') && !laneBBody(r).includes('every key in the Lane B slot')
+  && laneBBody(r).includes('Action needed: repair Lane B credentials or authentication configuration.'));
+r = await scenario((call) => call.lane === 'B'
+  ? keyOf(call) === 'anthropic-key-1' ? billing() : reply(503, '{"error":"overloaded"}')
+  : call.model === 'claude-haiku-5-5' ? Promise.reject(ccCreditError) : healthy(call), twoKeys);
+check('the primary route ends on its second key non-quota failure even when its first key was out of credit', !r.error
+  && laneBBody(r).includes('> ℹ️ 部分账号额度已用完：') && !laneBBody(r).includes('⛔')
+  && laneBBody(r).includes('Action needed: a 5xx originates from the model gateway/account')
+  && laneBKeys(r).endsWith('claude-haiku-5-5@anthropic-key-2'));
 
 // ci-central#73 review (C2/B5/A3): a cross-provider request uses the target slot's first key, even
 // after the target lane spent that key in the same run, so the account never depends on lane timing.
@@ -2151,9 +2225,14 @@ const verdictA = (call) => call.lane === 'A' && isIncremental(call)
     previous_findings: [{ id: 'A1', status: 'fixed', reason: '已传入租户' }] }) : healthy(call);
 const linearRound = (extra = {}) => atHead(H2, { files: [srcFile('run(user, tenant)'), testFile(), otherFile()], commits: linearTo(H2),
   compare: { [`${H1}...${H2}`]: sinceH1 }, contents: { 'src/a.ts': srcText }, comments: [...roundOne, ...replies], ...extra });
+const incrementalReportSchema = reviewJsonSchema({ incremental: true }).schema;
 for (const useBundle of [false, true]) {
   r = await scenario(verdictA, {}, linearRound({ useBundle }));
   const laneA = r.captured.find(({ lane }) => lane === 'A')?.body;
+  check(`source/bundle ${useBundle} an incremental request uses the strict previous_findings schema`, !r.error
+    && isDeepStrictEqual(laneA?.text?.format, { type: 'json_schema', name: 'review_report_incremental', strict: true, schema: incrementalReportSchema })
+    && isDeepStrictEqual(r.captured.find(({ lane }) => lane === 'B')?.body.output_config?.format,
+      { type: 'json_schema', schema: incrementalReportSchema }));
   // ci-central#72 review: a changed file is sent as its whole PR change, as a full review shows it,
   // so lines the PR removed before the reviewed commit (old();) stay visible; the lines changed
   // since that commit are named with the file.
@@ -2590,6 +2669,10 @@ check('DeepSeek uses the Go session and automatic caching on both Chat Completio
   && deepSeekRoutes[1].model === 'deepseek/deepseek-v4.1-flash'
   && deepSeekRoutes[1].headers['x-opencode-session'] === undefined
   && systemText(deepSeekRoutes[0].body) === systemText(deepSeekRoutes[1].body));
+check('both Chat Completions routes send a strict report schema alongside reasoning effort', !r.error
+  && deepSeekRoutes.length === 2 && deepSeekRoutes.every(({ body }) => body.reasoning_effort === 'high'
+    && isDeepStrictEqual(body.response_format, { type: 'json_schema', json_schema: { strict: true, ...fullReportSchema } })
+    && body.text === undefined));
 const goSpent = () => reply(429, '{"error":{"type":"GoUsageLimitError","message":"Weekly usage limit reached."}}');
 // Command Code's reply to every model and protocol once its credits ran out (2026-11-03).
 const ccSpent = () => reply(400, '{"error":{"message":"You have insufficient credits to make this request. Please purchase more credits to continue using the service.","type":"invalid_request_error","code":"BAD_REQUEST"}}');

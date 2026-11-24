@@ -3,7 +3,7 @@
 const { validateConfig, keySlotFor } = require('./index.js');
 const { readCredentials } = require('./review-credentials.js');
 const { packDiff, packIncremental, collectIssues, enrichWorkflows } = require('./review-context.js');
-const { PROMPT_VERSION, buildSystemPrompt, parseReview, renderReview, renderPartialReview } = require('./review-report.js');
+const { PROMPT_VERSION, buildSystemPrompt, reviewJsonSchema, parseReview, renderReview, renderPartialReview } = require('./review-report.js');
 const { createStatusPublisher } = require('./review-status.js');
 const { diffIdentity, changedSince, sinceReviewScope, encodeState, readState, collectReplies, trustedState, planLane,
   chooseIncremental, nextFindings, sinceLines, INCREMENTAL_SHARE_LIMIT } = require('./review-incremental.js');
@@ -34,8 +34,9 @@ const beijingTime = (iso) => new Date(Date.parse(iso) + 8 * 3600000).toISOString
 // The same spent quota, worded for each place it appears.
 function quotaWording(provider, { window, resetAt, credit = false }) {
   if (credit) {
+    const label = provider === 'anthropic' ? 'Anthropic' : provider;
     return { tried: `${provider} credit balance exhausted`, headline: `\`${provider}\` 的 API 余额已用完（等待下一次赠送额度或充值）`,
-      status: `${provider} API 余额已用完`, banner: 'API 余额已用完' };
+      status: `${provider} API 余额已用完`, banner: 'API 余额已用完', credit: true, action: `the ${label} API credit balance is exhausted` };
   }
   const [en, zh] = QUOTA_WINDOWS[window] ?? ['plan', '套餐'];
   const local = resetAt ? `北京时间 ${beijingTime(resetAt)} 重置` : '';
@@ -44,6 +45,7 @@ function quotaWording(provider, { window, resetAt, credit = false }) {
     headline: `\`${provider}\` 的${zh}用量上限已用完${resetAt ? `，${resetAt}（北京时间 ${beijingTime(resetAt)}）重置` : '（供应商未给出重置时间）'}`,
     status: `${provider} ${zh}上限已用完${local ? `，${local}` : ''}`,
     banner: `${zh}用量上限已用完${local ? `，${local}` : ''}`,
+    credit: false,
     action: `the ${provider} plan quota is exhausted (${en} usage limit${resetAt ? `, resets at ${resetAt}` : ''})`,
   };
 }
@@ -550,7 +552,9 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
 
   function responsesPayload(model, cacheSystemPrompt) {
     const chat = basePayload(model);
+    const format = reviewJsonSchema(laneMode(model));
     const payload = { model: model.id, input: chat.messages, max_output_tokens: model.max_output_tokens, store: false,
+      text: { format: { type: 'json_schema', strict: true, ...format } },
       ...(model.reasoning_effort ? { reasoning: { effort: model.reasoning_effort } } : {}) };
     const [systemMessage, ...laterMessages] = chat.messages;
     if (cacheSystemPrompt && systemMessage?.role === 'system' && typeof systemMessage.content === 'string') {
@@ -567,7 +571,8 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
   function anthropicPayload(model, cacheSystemPrompt) {
     const throttled = model.context_profile === 'kimi-k3-throttled';
     const systemPrompt = buildSystemPrompt(calibrated(model, throttled ? kimiK3System : system), model.review_lane_id, laneMode(model));
-    const payload = {
+    const { schema } = reviewJsonSchema(laneMode(model));
+    return {
       model: model.id,
       max_tokens: model.max_output_tokens,
       system: cacheSystemPrompt
@@ -575,9 +580,8 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
         : systemPrompt,
       messages: [{ role: 'user', content: contextFor(model).user }],
       thinking: { type: 'adaptive' },
+      output_config: { ...(model.effort ? { effort: model.effort } : {}), format: { type: 'json_schema', schema } },
     };
-    if (model.effort) payload.output_config = { effort: model.effort };
-    return payload;
   }
 
   // A fallback may name its own protocol; it still uses the lane's credentials.
@@ -605,7 +609,9 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
     }
     if (protocol === 'google-generate-content') return { model: scoped.id, ...googlePayload(scoped) };
     const chat = basePayload(scoped);
-    return scoped.reasoning_effort ? { ...chat, reasoning_effort: scoped.reasoning_effort } : chat;
+    return { ...chat,
+      response_format: { type: 'json_schema', json_schema: { strict: true, ...reviewJsonSchema(laneMode(scoped)) } },
+      ...(scoped.reasoning_effort ? { reasoning_effort: scoped.reasoning_effort } : {}) };
   }
 
   function classifyFailure(response, responseText, requestError, provider, quota) {
@@ -948,9 +954,12 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
     let lastProvider = first.provider;
     let lastClosedStream = null;
     let bestPartial = null;
-    // Every route that failed on a spent plan, so the lane says so instead of "HTTP 429".
+    // Name each exhausted plan or balance, and keep the latest failure unrelated to quota so a
+    // quota-exhausted fallback never hides the primary failure while later non-quota causes still show.
     const quotaNotes = [];
     let onlyQuota = true;
+    let lastNonQuota = null;
+    let primaryQuota = false;
 
     // Every provider whose route reported a spent quota: the paid route serves only when every
     // plan route before it is spent.
@@ -986,6 +995,7 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
     async function attemptModel(model, stage) {
       const supplied = contextFor(model, lane.id).pack;
       if (!supplied.coverage.some(file => file.patch_available && file.supplied_hunks)) {
+        onlyQuota = false;
         lastOutcome = 'no inspectable material for the configured context profile';
         tried.push(`${model.id} -> ${lastOutcome} (0 attempt(s))`);
         return null;
@@ -1034,6 +1044,7 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
         lastFailureKind = failureKind;
         lastOutcome = '';
         const quotaNote = outcome.quota ? quotaWording(route.provider, outcome.quota) : null;
+        if (!cross && !stage.lastResort) primaryQuota = Boolean(quotaNote);
         if (quotaNote) quotaProviders.add(route.provider);
         if (!cross) ownQuota = quotaNote;
         // A plan that stopped several models of the lane is named once, with its first reset time:
@@ -1101,7 +1112,11 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
           steps.push({ key, resend: { endsAt, totalMs: outcome.windowMs, slow: { charsPerSecond: outcome.slowChars, provider: route.provider } } });
           continue;
         }
-        if (!quotaNote) onlyQuota = false;
+        if (!quotaNote) {
+          onlyQuota = false;
+          lastNonQuota = { response, responseText, requestError, failureKind: lastFailureKind, reportError: lastReportError,
+            outcome: lastOutcome, provider: route.provider, closedStream: lastClosedStream };
+        }
         const failed = lastClosedStream
           ? `HTTP ${lastClosedStream.httpStatus}, stream closed before the model finished after ${lastClosedStream.seconds} s`
           : outcome.localDeadline ? `local deadline reached after ${Math.round((resend ? resend.totalMs : outcome.windowMs) / 1000)} s before the model finished${resend ? ' (both requests together; resent after a slow stream)' : ''}`
@@ -1174,24 +1189,45 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
 
     if (bestPartial) return bestPartial;
 
-    const failText = lastFailureKind === 'report-invalid'
-      ? `The model returned a response, but its report did not satisfy the evidence contract. ${lastReportError}`
-      : (lastResponseText || lastRequestError || '').trim();
-    const gatewayBlocked = lastFailureKind === 'gateway-blocked';
+    const allQuota = onlyQuota && quotaNotes.length > 0;
+    const { response, responseText, requestError, failureKind, reportError, outcome, provider, closedStream } =
+      (!allQuota && lastNonQuota) || { response: lastResponse, responseText: lastResponseText, requestError: lastRequestError,
+        failureKind: lastFailureKind, reportError: lastReportError, outcome: lastOutcome, provider: lastProvider, closedStream: lastClosedStream };
+    const failText = failureKind === 'report-invalid'
+      ? `The model returned a response, but its report did not satisfy the evidence contract. ${reportError}`
+      : (outcome || responseText || requestError || '').trim();
+    const gatewayBlocked = failureKind === 'gateway-blocked';
     const upstreamExhausted = failText.includes('failover_exhausted');
-    const status = lastResponse?.status ?? 'request failed';
+    const status = response?.status;
     const isServerSide = typeof status === 'number' && status >= 500;
     const stoppedSummary = `Review attempts did not produce a usable response. Tried: ${tried.join('; ')}.`;
     const fence = '```';
     const snippet = failText.replace(/`/g, "'").slice(0, 600);
-    // Command Code reports a spent plan as 429 RATE_LIMITED; say first what it really is.
-    const planNotes = quotaNotes.filter((note) => note.action);
-    const quotaAction = planNotes.length && lastFailureKind === 'quota-exhausted' && lastProvider !== 'anthropic'
-      ? `Action needed: ${planNotes.map((note) => note.action).join('; ')}. This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review.`
-      : '';
+    const quotaHeadlines = quotaNotes.map((note) => note.headline).join('；');
+    const fallbackOnlyQuota = quotaNotes.every((note) => note.provider !== first.provider);
+    const quotaBanner = allQuota || primaryQuota
+      ? `> ⛔ 额度用尽，不是限流：${quotaHeadlines}。`
+      : fallbackOnlyQuota
+        ? `> ℹ️ 备用供应商未接住：${quotaHeadlines}；本轮主失败并非额度用尽，见下方。`
+        : `> ℹ️ 部分账号额度已用完：${quotaHeadlines}；本轮主失败并非额度用尽，见下方。`;
+    let quotaAction = '';
+    if (allQuota) {
+      const reasons = quotaNotes.map((note) => note.action).join('; ');
+      if (quotaNotes.length === 1 && quotaNotes[0].credit && quotaNotes[0].provider === 'anthropic') {
+        quotaAction = finalStage?.keyCount > 1 && finalStage.creditSpent.size === finalStage.keyCount
+          ? `Action needed: the Anthropic API credit balance is exhausted on every key in the Lane ${lane.id} slot. Wait for the next credit grant or add credit; another model on the same accounts cannot recover the review.`
+          : 'Action needed: the Anthropic API credit balance is exhausted. Wait for the next credit grant or add credit; another model on the same account cannot recover the review.';
+      } else if (quotaNotes.every((note) => note.credit)) {
+        quotaAction = `Action needed: ${reasons}. This is an exhausted API credit balance, not a periodic plan quota: wait for the next credit grant or add credit; another model on the same account cannot recover the review.`;
+      } else if (quotaNotes.every((note) => !note.credit)) {
+        quotaAction = `Action needed: ${reasons}. This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review.`;
+      } else {
+        quotaAction = `Action needed: ${reasons}. Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review.`;
+      }
+    }
     const review = [
       '> AI review was not generated.',
-      ...(quotaNotes.length ? ['', `> ⛔ 额度用尽，不是限流：${quotaNotes.map((note) => note.headline).join('；')}。`] : []),
+      ...(quotaNotes.length ? ['', quotaBanner] : []),
       '',
       gatewayBlocked
         ? 'GitHub Actions reached the configured API endpoint, but the gateway returned an HTML verification page instead of JSON.'
@@ -1201,34 +1237,27 @@ async function runReview({ github, context, env = globalThis.process.env, fetch 
         ? `<details><summary>Upstream response (truncated)</summary>\n\n${fence}\n${snippet}\n${fence}\n</details>`
         : '',
       '',
-      gatewayBlocked
+      quotaAction || (gatewayBlocked
         ? 'Action needed: use an API base URL that GitHub-hosted runners can reach without browser verification, or run this workflow on a self-hosted runner.'
-        : lastFailureKind === 'quota-exhausted'
-          ? (lastProvider === 'anthropic'
-            ? (finalStage?.keyCount > 1 && finalStage.creditSpent.size === finalStage.keyCount
-              ? `Action needed: the Anthropic API credit balance is exhausted on every key in the Lane ${lane.id} slot. Wait for the next credit grant or add credit; another model on the same accounts cannot recover the review.`
-              : 'Action needed: the Anthropic API credit balance is exhausted. Wait for the next credit grant or add credit; another model on the same account cannot recover the review.')
-            // Every provider whose plan was spent is named, each with its own reset.
-            : quotaAction || `Action needed: the ${lastProvider} plan quota is exhausted. Wait for its reset or replenish it; retrying another model on the same plan cannot recover the review.`)
-          : lastFailureKind === 'authentication-failed'
-            ? `Action needed: repair Lane ${lane.id} credentials or authentication configuration.`
-            : lastFailureKind === 'endpoint-unavailable'
-              ? `Action needed: Lane ${lane.id} endpoint remained unreachable after one attempt per configured model and route.`
+        : failureKind === 'authentication-failed'
+          ? `Action needed: repair Lane ${lane.id} credentials or authentication configuration.`
+        : failureKind === 'endpoint-unavailable'
+          ? `Action needed: Lane ${lane.id} endpoint remained unreachable after one attempt per configured model and route.`
         : upstreamExhausted
           ? `Action needed: \`failover_exhausted\` means Lane ${lane.id} ran out of healthy upstreams. Inspect its central repository config and provider health.`
-          : lastOutcome
+        : outcome
           ? 'Action needed: inspect finish_reason and token usage for the incomplete or empty final response. This is not an authentication/HTTP failure and does not by itself prove an input-context limit.'
-        : lastFailureKind === 'report-invalid'
+        : failureKind === 'report-invalid'
           ? 'Action needed: inspect the local report-contract reason above. This is a report-format or code-evidence issue, not an authentication or HTTP failure; no parameter-repair resend was made.'
-        : lastClosedStream
-          ? `Action needed: this is not a rate limit, quota or authentication failure. ${lastProvider} accepted the request (HTTP ${lastClosedStream.httpStatus}) and streamed for ${lastClosedStream.seconds} s, then closed the stream before the model finished. Rerun with /review; a close at about the same time again points to a stream-length limit on that provider.`
+        : closedStream
+          ? `Action needed: this is not a rate limit, quota or authentication failure. ${provider} accepted the request (HTTP ${closedStream.httpStatus}) and streamed for ${closedStream.seconds} s, then closed the stream before the model finished. Rerun with /review; a close at about the same time again points to a stream-length limit on that provider.`
         : isServerSide
-            ? 'Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage.'
-            : 'Action needed: inspect the upstream response above to identify the request or auth problem.',
+          ? 'Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage.'
+          : 'Action needed: inspect the upstream response above to identify the request or auth problem.'),
     ].join('\n');
 
     return { lane, servedBy: null, review, reasoningLength: 0, status: 'diagnostic',
-      routeDetail: routeNotes.map((note) => note.text).join('；'), onlyQuota: onlyQuota && quotaNotes.length > 0 };
+      routeDetail: routeNotes.map((note) => note.text).join('；'), onlyQuota: allQuota };
   }
 
   // Context collection can take long enough for another push to land. Re-read the

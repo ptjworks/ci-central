@@ -3,7 +3,7 @@ import test from 'node:test';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { packDiff, packIncremental, excerpt, collectIssues, enrichWorkflows } = require('../review-action/src/review-context.js');
-const { buildSystemPrompt, parseReview, renderReview, renderPartialReview } = require('../review-action/src/review-report.js');
+const { buildSystemPrompt, reviewJsonSchema, parseReview, renderReview, renderPartialReview } = require('../review-action/src/review-report.js');
 
 const file = { filename: 'src/auth.js', status: 'modified', additions: 2, deletions: 1,
   patch: '@@ -10,2 +10,3 @@\n- return true;\n+ if (!user) throw new Error();\n+ return user.tenant === tenant;\n }\n@@ -40 +41 @@\n- persist();\n+ persist(user);' };
@@ -156,12 +156,109 @@ test('a verified finding survives when another finding in the report fails valid
   assert.ok(parsed.limitations.some((item) => item.includes('编造的问题') && item.includes('code quote')));
   assert.ok(!renderReview(parsed, context).includes('inventedCall'));
 });
-test('a JSON report wrapped in prose is used, but only its object', () => {
-  const wrapped = `以下是审核结果：\n\`\`\`json\n${JSON.stringify(report)}\n\`\`\`\n请参考。`;
+test('full and incremental structured outputs require every declared field and disallow extra properties', () => {
+  const { name, schema } = reviewJsonSchema();
+  assert.equal(name, 'review_report');
+  assert.deepEqual(schema.required, ['summary', 'reviewed_files', 'findings', 'limitations']);
+  assert.deepEqual(schema.properties.reviewed_files.items, { type: 'string' });
+  assert.deepEqual(schema.properties.limitations.items, { type: 'string' });
+  const findings = schema.properties.findings.items;
+  assert.deepEqual(findings.required, ['priority', 'file', 'side', 'line', 'title', 'trigger', 'impact', 'evidence', 'suggestion', 'confidence']);
+  assert.deepEqual(findings.properties.priority.enum, ['P0', 'P1', 'P2']);
+  assert.deepEqual(findings.properties.side.enum, ['new', 'old']);
+  assert.deepEqual(findings.properties.line, { type: 'integer' });
+  assert.deepEqual(findings.properties.confidence.enum, ['high', 'medium', 'low']);
+  assert.match(findings.properties.evidence.description, /双引号与反斜杠必须正确转义/);
+  const incremental = reviewJsonSchema({ incremental: true });
+  assert.equal(incremental.name, 'review_report_incremental');
+  assert.deepEqual(incremental.schema.required, [...schema.required, 'previous_findings']);
+  const { previous_findings: previous, ...full } = incremental.schema.properties;
+  assert.deepEqual(full, schema.properties);
+  assert.deepEqual(previous, { type: 'array', items: {
+    type: 'object', additionalProperties: false,
+    properties: { id: { type: 'string' }, status: { type: 'string', enum: ['fixed', 'still_present', 'answered', 'unclear'] },
+      reason: { type: 'string' } },
+    required: ['id', 'status', 'reason'],
+  } });
+  function assertStrict(node) {
+    const allowed = ['type', 'properties', 'required', 'additionalProperties', 'items', 'enum', 'description'];
+    assert.ok(Object.keys(node).every((key) => allowed.includes(key)));
+    if (node.type === 'object') {
+      assert.equal(node.additionalProperties, false);
+      assert.deepEqual(node.required, Object.keys(node.properties));
+      Object.values(node.properties).forEach(assertStrict);
+    }
+    if (node.items) assertStrict(node.items);
+  }
+  assertStrict(schema);
+  assertStrict(incremental.schema);
+});
+
+test('prose with stray braces does not interfere with a fenced JSON report', () => {
+  const wrapped = `以下是审核结果 {：\r\n\`\`\`JSON\r\n${JSON.stringify(report)}\r\n\`\`\`\r\n请参考。}`;
   const parsed = parseReview(wrapped, context);
   assert.equal(parsed.findings.length, 1);
   assert.ok(!renderReview(parsed, context).includes('请参考'));
   assert.throws(() => parseReview('结论：{没有 JSON}', context), /JSON report/);
+});
+test('JSON extraction accepts a BOM and observes escaped quotes and braces in strings', () => {
+  const summary = '路径 C:\\test，参数 {"path": ""}。';
+  const json = JSON.stringify({ ...report, summary });
+  assert.equal(parseReview(`\uFEFF  ${json}\n`, context).summary, summary);
+  assert.equal(parseReview(`以下是审核结果：{other} ${json} 结束。`, context).summary, summary);
+});
+test('multiple contract objects anywhere in the response are ambiguous', () => {
+  const json = JSON.stringify(report);
+  for (const input of [
+    `${json}\n${json}`,
+    `\`\`\`json\n${json}\n\`\`\`\n\n\`\`\`\n${json}\n\`\`\``,
+    `\`\`\`json\n${json}\n\`\`\`\n\n${json}`,
+    `${json}\n\n\`\`\`json\n${json}\n\`\`\``,
+    `\`\`\`js\n${json}\n\`\`\`\n\n\`\`\`json\n${json}\n\`\`\``,
+  ]) {
+    assert.throws(() => parseReview(input, context), /shape=multi_object, .*parse_error_pos=none, reason_class=ambiguous_object/);
+  }
+});
+test('one fenced object with missing keys still gets an exact structural rejection', () => {
+  assert.throws(() => parseReview('[]', context), /report is not an object/);
+  assert.throws(() => parseReview('说明：\n```json\n{}\n```\n结束。', context), /invalid summary/);
+  assert.throws(() => parseReview('说明：\n```\n{"summary":"审核完成"}\n```', context), /invalid arrays/);
+});
+test('malformed quoted code reports a precise offset without exposing model or diff text', () => {
+  const malformed = '{"summary":"合成代码 SECRET_MARKER: {"path": ""}"}';
+  const offset = malformed.indexOf('"path"') + 1;
+  for (const [prefix, suffix, shape] of [
+    ['', '', 'json_candidate'],
+    ['```json\r\n', '\r\n```', 'fenced'],
+    ['说明：\n```json\n', '\n```\n结束。', 'fenced'],
+    ['说明：', ' 结束。', 'json_candidate'],
+  ]) {
+    const input = prefix + malformed + suffix;
+    assert.throws(() => parseReview(input, context), (error) => {
+      assert.equal(error.message, `Review contract: response is not a JSON report (shape=${shape}, starts_with_brace=${!prefix}, has_fence=${prefix.includes('```')}, content_len=${input.length}, parse_error_pos=${prefix.length + offset}, reason_class=after_property_value).`);
+      assert.ok(error.message.length <= 220);
+      return true;
+    });
+  }
+});
+test('Markdown and empty responses produce closed-vocabulary diagnostics', () => {
+  const markdown = '## SECRET_MARKER\n- 仅有 Markdown 审核结论。';
+  assert.throws(() => parseReview(markdown, context), {
+    message: `Review contract: response is not a JSON report (shape=prose, starts_with_brace=false, has_fence=false, content_len=${markdown.length}, parse_error_pos=none, reason_class=no_object).`,
+  });
+  assert.throws(() => parseReview('\uFEFF  \n', context), /shape=empty, .*content_len=0, parse_error_pos=none, reason_class=unexpected_end/);
+  assert.throws(() => parseReview('{x at position 42}', context), /parse_error_pos=1, reason_class=expected_property_name/);
+  assert.throws(() => parseReview('说明：\n```json\nx at position 42\n```', context), /parse_error_pos=none, reason_class=unexpected_token/);
+  const multiFence = '```js\nconst a = 1;\n```\n\n```json\n{"summary":"x"y"}\n```';
+  assert.throws(() => parseReview(multiFence, context), (error) => {
+    const pos = multiFence.indexOf('y"}');
+    assert.equal(error.message, `Review contract: response is not a JSON report (shape=fenced, starts_with_brace=false, has_fence=true, content_len=${multiFence.length}, parse_error_pos=${pos}, reason_class=after_property_value).`);
+    return true;
+  });
+  const truncated = '说明：{"summary":"unterminated';
+  assert.throws(() => parseReview(truncated, context), {
+    message: `Review contract: response is not a JSON report (shape=json_candidate, starts_with_brace=false, has_fence=false, content_len=${truncated.length}, parse_error_pos=${truncated.length}, reason_class=unterminated_string).`,
+  });
 });
 test('blank or oversized limitation items cannot invalidate a report', () => {
   const changed = structuredClone(report);

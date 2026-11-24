@@ -646,6 +646,46 @@ var require_review_report = __commonJS({
         JSON.stringify(incremental ? incrementalSchema : schema)
       ].filter(Boolean).join("\n\n");
     }
+    function reviewJsonSchema2({ incremental = false } = {}) {
+      const properties = {
+        summary: { type: "string", description: schema.summary },
+        reviewed_files: { type: "array", items: { type: "string" }, description: schema.reviewed_files[0] },
+        findings: { type: "array", items: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            priority: { type: "string", enum: ["P0", "P1", "P2"] },
+            file: { type: "string" },
+            side: { type: "string", enum: ["new", "old"] },
+            line: { type: "integer" },
+            title: { type: "string" },
+            trigger: { type: "string" },
+            impact: { type: "string" },
+            evidence: { type: "string", description: "\u4ECE\u5DF2\u63D0\u4F9B diff \u6216\u6E90\u7801\u590D\u5236\u7684\u7CBE\u786E\u4EE3\u7801\u7247\u6BB5\uFF1BJSON \u5B57\u7B26\u4E32\u5185\u7684\u53CC\u5F15\u53F7\u4E0E\u53CD\u659C\u6760\u5FC5\u987B\u6B63\u786E\u8F6C\u4E49" },
+            suggestion: { type: "string" },
+            confidence: { type: "string", enum: ["high", "medium", "low"] }
+          },
+          required: ["priority", "file", "side", "line", "title", "trigger", "impact", "evidence", "suggestion", "confidence"]
+        } },
+        limitations: { type: "array", items: { type: "string" }, description: schema.limitations[0] }
+      };
+      if (incremental) {
+        properties.previous_findings = { type: "array", items: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            id: { type: "string" },
+            status: { type: "string", enum: ["fixed", "still_present", "answered", "unclear"] },
+            reason: { type: "string" }
+          },
+          required: ["id", "status", "reason"]
+        } };
+      }
+      return {
+        name: incremental ? "review_report_incremental" : "review_report",
+        schema: { type: "object", additionalProperties: false, properties, required: Object.keys(properties) }
+      };
+    }
     var VERDICTS = {
       fixed: "fixed",
       still_present: "still_present",
@@ -700,25 +740,97 @@ var require_review_report = __commonJS({
       }
       return matches;
     }
+    var isJsonObject = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+    var hasContractKeys = (value) => isJsonObject(value) && ["summary", "reviewed_files", "findings", "limitations"].every((key) => Object.hasOwn(value, key));
+    var JSON_ERROR_CLASSES = [
+      [/Unterminated string/i, "unterminated_string"],
+      [/Bad control character/i, "bad_control_char"],
+      [/Bad escaped character/i, "bad_escape"],
+      [/after property value/i, "after_property_value"],
+      [/Expected (?:double-quoted )?property name/i, "expected_property_name"],
+      [/Unexpected end of JSON/i, "unexpected_end"],
+      [/Unexpected token/i, "unexpected_token"]
+    ];
+    function classifyJsonError(error, baseOffset = 0) {
+      const position = /\bat position (\d+)\b(?: \(line \d+ column \d+\))?$/.exec(error.message)?.[1];
+      return {
+        parseErrorPos: position === void 0 ? "none" : baseOffset + Number(position),
+        reasonClass: JSON_ERROR_CLASSES.find(([pattern]) => pattern.test(error.message))?.[1] ?? "syntax"
+      };
+    }
     function parseJsonReport(text) {
-      const trimmed = text.trim().replace(/^```(?:json)?\s*\n([\s\S]*?)\n```\s*$/, "$1");
-      try {
-        return JSON.parse(trimmed);
-      } catch {
+      const trimmed = text.replace(/^\uFEFF/, "").trim();
+      const contentLen = trimmed.length;
+      const startsWithBrace = trimmed.startsWith("{");
+      const hasFence = /```/.test(trimmed);
+      function reject(shape, reasonClass, parseErrorPos = "none") {
+        throw new Error(`Review contract: response is not a JSON report (shape=${shape}, starts_with_brace=${startsWithBrace}, has_fence=${hasFence}, content_len=${contentLen}, parse_error_pos=${parseErrorPos}, reason_class=${reasonClass}).`);
       }
-      const start = trimmed.indexOf("{");
-      const end = trimmed.lastIndexOf("}");
-      if (start >= 0 && end > start) {
+      let failure;
+      function parseCandidate(candidate, shape, baseOffset) {
         try {
-          return JSON.parse(trimmed.slice(start, end + 1));
-        } catch {
+          return JSON.parse(candidate);
+        } catch (error) {
+          if (shape && !failure) failure = { shape, ...classifyJsonError(error, baseOffset) };
+          return void 0;
         }
       }
-      throw new Error("Review contract: response is not a JSON report.");
+      const direct = parseCandidate(trimmed, startsWithBrace ? "json_candidate" : null, 0);
+      if (direct !== void 0) return direct;
+      const wholeFence = /^```(?:json)?[ \t]*\r?\n([\s\S]*?)\r?\n```\s*$/i.exec(trimmed);
+      if (wholeFence && !/^[ \t]*```/m.test(wholeFence[1])) {
+        const report = parseCandidate(wholeFence[1], "fenced", trimmed.indexOf("\n") + 1);
+        if (report !== void 0) return report;
+      }
+      const fencedObjects = [];
+      const checkedSpans = [];
+      for (const block of trimmed.matchAll(/^```([a-z0-9_-]*)[ \t]*\r?\n([\s\S]*?)\r?\n```[ \t]*$/gim)) {
+        if (block[1] && block[1].toLowerCase() !== "json") continue;
+        checkedSpans.push([block.index, block.index + block[0].length]);
+        const report = parseCandidate(block[2], "fenced", block.index + block[0].indexOf("\n") + 1);
+        if (isJsonObject(report)) fencedObjects.push(report);
+      }
+      const fencedReports = fencedObjects.filter(hasContractKeys);
+      if (fencedReports.length > 1) reject("multi_object", "ambiguous_object");
+      const segments = [];
+      let cursor = 0;
+      for (const [spanStart, spanEnd] of checkedSpans) {
+        if (spanStart > cursor) segments.push([cursor, spanStart]);
+        cursor = spanEnd;
+      }
+      if (cursor < contentLen) segments.push([cursor, contentLen]);
+      const outsideReports = [];
+      for (const [segStart, segEnd] of segments) {
+        let start = segStart, depth = 0, inString = false, escaped = false;
+        for (let index = segStart; index < segEnd; index++) {
+          const char = trimmed[index];
+          if (inString) {
+            if (escaped) escaped = false;
+            else if (char === "\\") escaped = true;
+            else if (char === '"') inString = false;
+          } else if (char === "{") {
+            if (depth++ === 0) start = index;
+          } else if (depth > 0) {
+            if (char === '"') inString = true;
+            if (char === "}" && --depth === 0) {
+              const report = parseCandidate(trimmed.slice(start, index + 1), "json_candidate", start);
+              if (hasContractKeys(report)) outsideReports.push(report);
+            }
+          }
+        }
+        if (depth > 0) parseCandidate(trimmed.slice(start, segEnd), "json_candidate", start);
+      }
+      const allReports = [...fencedReports, ...outsideReports];
+      if (allReports.length > 1) reject("multi_object", "ambiguous_object");
+      if (allReports.length === 1) return allReports[0];
+      if (fencedObjects.length === 1) return fencedObjects[0];
+      if (contentLen === 0) reject("empty", "unexpected_end");
+      if (failure) reject(failure.shape, failure.reasonClass, failure.parseErrorPos);
+      reject("prose", "no_object");
     }
     function parseReview2(text, context, { previous } = {}) {
       const report = parseJsonReport(text);
-      if (!report || typeof report !== "object" || Array.isArray(report)) throw new Error("Review contract: report is not an object.");
+      if (!isJsonObject(report)) throw new Error("Review contract: report is not an object.");
       const summary = plain(report.summary, "summary", 800);
       if (!Array.isArray(report.reviewed_files) || !Array.isArray(report.findings) || !Array.isArray(report.limitations) || report.findings.length > 100 || report.limitations.length > 100) throw new Error("Review contract: invalid arrays.");
       const supplied = new Map(context.coverage.filter((file) => file.supplied_hunks && file.patch_available).map((file) => [file.file, file]));
@@ -910,7 +1022,7 @@ ${delimiter}`;
         return reason + "> \u8F93\u51FA\u672A\u5B8C\u6574\u7ED3\u675F\uFF0C\u5269\u4F59\u7247\u6BB5\u65E0\u6CD5\u6EE1\u8DB3\u62A5\u544A\u5951\u7EA6\uFF1B\u4E0D\u5C55\u793A\u539F\u59CB JSON\uFF0C\u4E0D\u8BA1\u5165 quorum\u3002\n\n\u8BF7\u67E5\u770B\u672C\u6B21\u8FD0\u884C\u7684\u7ED3\u675F\u539F\u56E0\u4E0E token \u7EDF\u8BA1\u3002";
       }
     }
-    module2.exports = { PROMPT_VERSION: PROMPT_VERSION2, buildSystemPrompt: buildSystemPrompt2, parseReview: parseReview2, renderReview: renderReview2, renderPartialReview: renderPartialReview2 };
+    module2.exports = { PROMPT_VERSION: PROMPT_VERSION2, buildSystemPrompt: buildSystemPrompt2, reviewJsonSchema: reviewJsonSchema2, parseReview: parseReview2, renderReview: renderReview2, renderPartialReview: renderPartialReview2 };
   }
 });
 
@@ -1306,7 +1418,7 @@ var require_review_incremental = __commonJS({
 var { validateConfig, keySlotFor } = require_index();
 var { readCredentials } = require_review_credentials();
 var { packDiff, packIncremental, collectIssues, enrichWorkflows } = require_review_context();
-var { PROMPT_VERSION, buildSystemPrompt, parseReview, renderReview, renderPartialReview } = require_review_report();
+var { PROMPT_VERSION, buildSystemPrompt, reviewJsonSchema, parseReview, renderReview, renderPartialReview } = require_review_report();
 var { createStatusPublisher } = require_review_status();
 var {
   diffIdentity,
@@ -1338,11 +1450,14 @@ function reportedQuota(error) {
 var beijingTime = (iso) => new Date(Date.parse(iso) + 8 * 36e5).toISOString().slice(0, 16).replace("T", " ");
 function quotaWording(provider, { window, resetAt, credit = false }) {
   if (credit) {
+    const label = provider === "anthropic" ? "Anthropic" : provider;
     return {
       tried: `${provider} credit balance exhausted`,
       headline: `\`${provider}\` \u7684 API \u4F59\u989D\u5DF2\u7528\u5B8C\uFF08\u7B49\u5F85\u4E0B\u4E00\u6B21\u8D60\u9001\u989D\u5EA6\u6216\u5145\u503C\uFF09`,
       status: `${provider} API \u4F59\u989D\u5DF2\u7528\u5B8C`,
-      banner: "API \u4F59\u989D\u5DF2\u7528\u5B8C"
+      banner: "API \u4F59\u989D\u5DF2\u7528\u5B8C",
+      credit: true,
+      action: `the ${label} API credit balance is exhausted`
     };
   }
   const [en, zh] = QUOTA_WINDOWS[window] ?? ["plan", "\u5957\u9910"];
@@ -1352,6 +1467,7 @@ function quotaWording(provider, { window, resetAt, credit = false }) {
     headline: `\`${provider}\` \u7684${zh}\u7528\u91CF\u4E0A\u9650\u5DF2\u7528\u5B8C${resetAt ? `\uFF0C${resetAt}\uFF08\u5317\u4EAC\u65F6\u95F4 ${beijingTime(resetAt)}\uFF09\u91CD\u7F6E` : "\uFF08\u4F9B\u5E94\u5546\u672A\u7ED9\u51FA\u91CD\u7F6E\u65F6\u95F4\uFF09"}`,
     status: `${provider} ${zh}\u4E0A\u9650\u5DF2\u7528\u5B8C${local ? `\uFF0C${local}` : ""}`,
     banner: `${zh}\u7528\u91CF\u4E0A\u9650\u5DF2\u7528\u5B8C${local ? `\uFF0C${local}` : ""}`,
+    credit: false,
     action: `the ${provider} plan quota is exhausted (${en} usage limit${resetAt ? `, resets at ${resetAt}` : ""})`
   };
 }
@@ -1838,11 +1954,13 @@ ${googleDeepReviewContract}`), model.review_lane_id, laneMode(model));
   }
   function responsesPayload(model, cacheSystemPrompt) {
     const chat = basePayload(model);
+    const format = reviewJsonSchema(laneMode(model));
     const payload = {
       model: model.id,
       input: chat.messages,
       max_output_tokens: model.max_output_tokens,
       store: false,
+      text: { format: { type: "json_schema", strict: true, ...format } },
       ...model.reasoning_effort ? { reasoning: { effort: model.reasoning_effort } } : {}
     };
     const [systemMessage, ...laterMessages] = chat.messages;
@@ -1858,15 +1976,15 @@ ${googleDeepReviewContract}`), model.review_lane_id, laneMode(model));
   function anthropicPayload(model, cacheSystemPrompt) {
     const throttled = model.context_profile === "kimi-k3-throttled";
     const systemPrompt = buildSystemPrompt(calibrated(model, throttled ? kimiK3System : system), model.review_lane_id, laneMode(model));
-    const payload = {
+    const { schema } = reviewJsonSchema(laneMode(model));
+    return {
       model: model.id,
       max_tokens: model.max_output_tokens,
       system: cacheSystemPrompt ? [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }] : systemPrompt,
       messages: [{ role: "user", content: contextFor(model).user }],
-      thinking: { type: "adaptive" }
+      thinking: { type: "adaptive" },
+      output_config: { ...model.effort ? { effort: model.effort } : {}, format: { type: "json_schema", schema } }
     };
-    if (model.effort) payload.output_config = { effort: model.effort };
-    return payload;
   }
   const protocolOf = (lane, model) => model.protocol ?? lane.protocol;
   const legacyGoogle = (lane, model) => protocolOf(lane, model) === "google-generate-content" && ownProvider(lane) !== "opencode-go";
@@ -1888,7 +2006,11 @@ ${googleDeepReviewContract}`), model.review_lane_id, laneMode(model));
     }
     if (protocol === "google-generate-content") return { model: scoped.id, ...googlePayload(scoped) };
     const chat = basePayload(scoped);
-    return scoped.reasoning_effort ? { ...chat, reasoning_effort: scoped.reasoning_effort } : chat;
+    return {
+      ...chat,
+      response_format: { type: "json_schema", json_schema: { strict: true, ...reviewJsonSchema(laneMode(scoped)) } },
+      ...scoped.reasoning_effort ? { reasoning_effort: scoped.reasoning_effort } : {}
+    };
   }
   function classifyFailure(response, responseText, requestError, provider, quota) {
     const status = response?.status;
@@ -2189,22 +2311,25 @@ ${requestError || ""}`;
     let bestPartial = null;
     const quotaNotes = [];
     let onlyQuota = true;
+    let lastNonQuota = null;
+    let primaryQuota = false;
     const quotaProviders = /* @__PURE__ */ new Set();
     let finalStage = null;
     let slowResendsLeft = first.slow_resend ? 1 : 0;
     const routeNotes = [];
-    function noteRoute(provider, outcome, quota, resend) {
+    function noteRoute(provider2, outcome2, quota, resend) {
       const seconds = (ms) => Math.round(ms / 1e3);
-      const note = quota ?? (lastFailureKind === "report-invalid" ? { key: `${provider}:contract`, text: `${provider} \u7684\u62A5\u544A\u672A\u901A\u8FC7\u8BC1\u636E\u6821\u9A8C` } : lastOutcome ? { key: `${provider}:incomplete`, text: `${provider} \u7684\u8F93\u51FA\u4E0D\u5B8C\u6574` } : lastClosedStream ? { key: `${provider}:closed`, text: `${provider} \u7684\u6D41\u5728 ${lastClosedStream.seconds} \u79D2\u540E\u88AB\u5173\u95ED` } : outcome.localDeadline ? { key: `${provider}:deadline`, text: resend ? `${provider} \u8F93\u51FA\u8FC7\u6162\uFF0C\u91CD\u53D1\u4E00\u6B21\u540E\u4ECD\u672A\u5728 ${seconds(resend.totalMs)} \u79D2\u5185\u5199\u5B8C` : `${provider} \u672A\u5728 ${seconds(outcome.windowMs)} \u79D2\u5185\u5199\u5B8C` } : outcome.slowChars !== null ? { key: `${provider}:slow`, text: `${provider} \u8F93\u51FA\u8FC7\u6162\uFF0C\u5269\u4F59\u65F6\u95F4\u4E0D\u591F\u91CD\u53D1` } : outcome.failureKind === "authentication-failed" ? { key: `${provider}:auth`, text: `${provider} \u7684 key \u88AB\u62D2\u7EDD` } : outcome.failureKind === "endpoint-unavailable" ? { key: `${provider}:endpoint`, text: `${provider} \u8FDE\u63A5\u5931\u8D25` } : { key: `${provider}:http`, text: `${provider} HTTP ${Number.isInteger(outcome.httpStatus) ? outcome.httpStatus : "\u8BF7\u6C42\u5931\u8D25"}` });
-      const reason = resend && note.key !== `${provider}:deadline` ? {
+      const note = quota ?? (lastFailureKind === "report-invalid" ? { key: `${provider2}:contract`, text: `${provider2} \u7684\u62A5\u544A\u672A\u901A\u8FC7\u8BC1\u636E\u6821\u9A8C` } : lastOutcome ? { key: `${provider2}:incomplete`, text: `${provider2} \u7684\u8F93\u51FA\u4E0D\u5B8C\u6574` } : lastClosedStream ? { key: `${provider2}:closed`, text: `${provider2} \u7684\u6D41\u5728 ${lastClosedStream.seconds} \u79D2\u540E\u88AB\u5173\u95ED` } : outcome2.localDeadline ? { key: `${provider2}:deadline`, text: resend ? `${provider2} \u8F93\u51FA\u8FC7\u6162\uFF0C\u91CD\u53D1\u4E00\u6B21\u540E\u4ECD\u672A\u5728 ${seconds(resend.totalMs)} \u79D2\u5185\u5199\u5B8C` : `${provider2} \u672A\u5728 ${seconds(outcome2.windowMs)} \u79D2\u5185\u5199\u5B8C` } : outcome2.slowChars !== null ? { key: `${provider2}:slow`, text: `${provider2} \u8F93\u51FA\u8FC7\u6162\uFF0C\u5269\u4F59\u65F6\u95F4\u4E0D\u591F\u91CD\u53D1` } : outcome2.failureKind === "authentication-failed" ? { key: `${provider2}:auth`, text: `${provider2} \u7684 key \u88AB\u62D2\u7EDD` } : outcome2.failureKind === "endpoint-unavailable" ? { key: `${provider2}:endpoint`, text: `${provider2} \u8FDE\u63A5\u5931\u8D25` } : { key: `${provider2}:http`, text: `${provider2} HTTP ${Number.isInteger(outcome2.httpStatus) ? outcome2.httpStatus : "\u8BF7\u6C42\u5931\u8D25"}` });
+      const reason = resend && note.key !== `${provider2}:deadline` ? {
         key: `${note.key}:resent`,
-        text: `${provider} \u8F93\u51FA\u8FC7\u6162\u5DF2\u91CD\u53D1\u4E00\u6B21\uFF0C\u91CD\u53D1\u7ED3\u679C\uFF1A${note.text.startsWith(provider) ? note.text.slice(provider.length).replace(/^\s*的?\s*/, "") : note.text}`
+        text: `${provider2} \u8F93\u51FA\u8FC7\u6162\u5DF2\u91CD\u53D1\u4E00\u6B21\uFF0C\u91CD\u53D1\u7ED3\u679C\uFF1A${note.text.startsWith(provider2) ? note.text.slice(provider2.length).replace(/^\s*的?\s*/, "") : note.text}`
       } : note;
       if (!routeNotes.some((existing) => existing.key === reason.key)) routeNotes.push(reason);
     }
     async function attemptModel(model2, stage) {
       const supplied = contextFor(model2, lane.id).pack;
       if (!supplied.coverage.some((file) => file.patch_available && file.supplied_hunks)) {
+        onlyQuota = false;
         lastOutcome = "no inspectable material for the configured context profile";
         tried.push(`${model2.id} -> ${lastOutcome} (0 attempt(s))`);
         return null;
@@ -2228,28 +2353,29 @@ ${requestError || ""}`;
         finalStage = stage;
         const checkSlow = !via && !stage.lastResort && !resend && slowResendsLeft > 0;
         const resendWindowMs = resend ? Math.max(1, resend.endsAt - Date.now()) : void 0;
-        const outcome = await callModel(lane, model2, {
+        const outcome2 = await callModel(lane, model2, {
           route,
           ...resend ? { windowMs: resendWindowMs, spentMs: resend.totalMs - resendWindowMs, sessionSuffix: "-resend" } : {},
           ...checkSlow ? { slowStream: { afterMs: first.slow_resend.after_ms, minCharsPerSecond: first.slow_resend.min_chars_per_second } } : {}
         });
         const attemptLabel = via ? `${model2.id} via ${via.provider} ${via.modelId}` : stage.lastResort ? `${model2.id} on ${route.provider} (last resort${servedKey ? `, key ${key + 1}/${stage.keyCount}` : ""})` : servedKey ? `${model2.id} (key ${key + 1}/${stage.keyCount})` : model2.id;
-        const { response, responseText, requestError, attempts, failureKind } = outcome;
-        lastClosedStream = outcome.errorCode === "REVIEW_INCOMPLETE_STREAM" ? { httpStatus: outcome.httpStatus ?? 200, seconds: Math.round(outcome.elapsedMs / 1e3) } : null;
+        const { response: response2, responseText: responseText2, requestError: requestError2, attempts, failureKind: failureKind2 } = outcome2;
+        lastClosedStream = outcome2.errorCode === "REVIEW_INCOMPLETE_STREAM" ? { httpStatus: outcome2.httpStatus ?? 200, seconds: Math.round(outcome2.elapsedMs / 1e3) } : null;
         lastProvider = route.provider;
-        lastResponse = response;
-        lastResponseText = responseText;
-        lastRequestError = requestError;
-        lastFailureKind = failureKind;
+        lastResponse = response2;
+        lastResponseText = responseText2;
+        lastRequestError = requestError2;
+        lastFailureKind = failureKind2;
         lastOutcome = "";
-        const quotaNote = outcome.quota ? quotaWording(route.provider, outcome.quota) : null;
+        const quotaNote = outcome2.quota ? quotaWording(route.provider, outcome2.quota) : null;
+        if (!cross && !stage.lastResort) primaryQuota = Boolean(quotaNote);
         if (quotaNote) quotaProviders.add(route.provider);
         if (!cross) ownQuota = quotaNote;
-        const quotaKey = outcome.quota && `${route.provider}:${outcome.quota.credit ? "credit" : outcome.quota.window ?? "plan"}`;
+        const quotaKey = outcome2.quota && `${route.provider}:${outcome2.quota.credit ? "credit" : outcome2.quota.window ?? "plan"}`;
         if (quotaNote && !quotaNotes.some((note) => note.key === quotaKey)) quotaNotes.push({ key: quotaKey, provider: route.provider, ...quotaNote });
-        if (response?.ok && !requestError && failureKind !== "gateway-blocked") {
+        if (response2?.ok && !requestError2 && failureKind2 !== "gateway-blocked") {
           try {
-            const { review: review2, record, reasoningLength, reasoningUnit, complete, finishReason } = extractReview(lane, model2, responseText);
+            const { review: review2, record, reasoningLength, reasoningUnit, complete, finishReason } = extractReview(lane, model2, responseText2);
             if (review2 && complete) {
               return {
                 lane,
@@ -2293,29 +2419,41 @@ ${requestError || ""}`;
             console.log(`[Lane ${lane.id}/${route.modelId}] report rejected: ${error?.message?.startsWith("Review contract:") ? error.message : "invalid report envelope"}`);
           }
         }
-        const slowText = outcome.slowChars !== null ? `stream too slow (${outcome.slowChars} chars/s over the first ${Math.round(first.slow_resend.after_ms / 1e3)} s), stopped after ${Math.round(outcome.elapsedMs / 1e3)} s` : "";
-        const remainingMs = outcome.windowMs - outcome.elapsedMs;
-        if (checkSlow && outcome.slowChars !== null && remainingMs >= MIN_RESEND_WINDOW_MS) {
+        const slowText = outcome2.slowChars !== null ? `stream too slow (${outcome2.slowChars} chars/s over the first ${Math.round(first.slow_resend.after_ms / 1e3)} s), stopped after ${Math.round(outcome2.elapsedMs / 1e3)} s` : "";
+        const remainingMs = outcome2.windowMs - outcome2.elapsedMs;
+        if (checkSlow && outcome2.slowChars !== null && remainingMs >= MIN_RESEND_WINDOW_MS) {
           const endsAt = Date.now() + remainingMs;
           slowResendsLeft -= 1;
           tried.push(`${attemptLabel} -> ${slowText} (${attempts ?? 0} attempt(s))`);
-          console.log(`[Lane ${lane.id}/${model2.id}] ${route.provider} streamed ${outcome.slowChars} chars/s over the first ${Math.round(first.slow_resend.after_ms / 1e3)} s, below ${first.slow_resend.min_chars_per_second}; sending the same request once more to ${route.provider} with the remaining ${Math.round(remainingMs / 1e3)} s.`);
+          console.log(`[Lane ${lane.id}/${model2.id}] ${route.provider} streamed ${outcome2.slowChars} chars/s over the first ${Math.round(first.slow_resend.after_ms / 1e3)} s, below ${first.slow_resend.min_chars_per_second}; sending the same request once more to ${route.provider} with the remaining ${Math.round(remainingMs / 1e3)} s.`);
           await statusPublisher.update(lane.id, "slow_resend", `${model2.id} @ ${route.provider}`);
-          steps.push({ key, resend: { endsAt, totalMs: outcome.windowMs, slow: { charsPerSecond: outcome.slowChars, provider: route.provider } } });
+          steps.push({ key, resend: { endsAt, totalMs: outcome2.windowMs, slow: { charsPerSecond: outcome2.slowChars, provider: route.provider } } });
           continue;
         }
-        if (!quotaNote) onlyQuota = false;
-        const failed = lastClosedStream ? `HTTP ${lastClosedStream.httpStatus}, stream closed before the model finished after ${lastClosedStream.seconds} s` : outcome.localDeadline ? `local deadline reached after ${Math.round((resend ? resend.totalMs : outcome.windowMs) / 1e3)} s before the model finished${resend ? " (both requests together; resent after a slow stream)" : ""}` : slowText || `HTTP ${response?.status ?? "request failed"}${quotaNote ? `, ${quotaNote.tried}` : ""}`;
+        if (!quotaNote) {
+          onlyQuota = false;
+          lastNonQuota = {
+            response: response2,
+            responseText: responseText2,
+            requestError: requestError2,
+            failureKind: lastFailureKind,
+            reportError: lastReportError,
+            outcome: lastOutcome,
+            provider: route.provider,
+            closedStream: lastClosedStream
+          };
+        }
+        const failed = lastClosedStream ? `HTTP ${lastClosedStream.httpStatus}, stream closed before the model finished after ${lastClosedStream.seconds} s` : outcome2.localDeadline ? `local deadline reached after ${Math.round((resend ? resend.totalMs : outcome2.windowMs) / 1e3)} s before the model finished${resend ? " (both requests together; resent after a slow stream)" : ""}` : slowText || `HTTP ${response2?.status ?? "request failed"}${quotaNote ? `, ${quotaNote.tried}` : ""}`;
         tried.push(`${attemptLabel} -> ${lastFailureKind === "report-invalid" ? `evidence contract rejected: ${lastReportError}` : lastOutcome || failed} (${attempts ?? 0} attempt(s))`);
-        noteRoute(route.provider, outcome, quotaNote && { key: quotaKey, text: quotaNote.status }, resend);
+        noteRoute(route.provider, outcome2, quotaNote && { key: quotaKey, text: quotaNote.status }, resend);
         if (cross) continue;
-        if (stage.keyCount > 1 && accountFailure(outcome)) {
-          if (outcome.failureKind === "quota-exhausted" || outcome.failureKind === "authentication-failed") stage.spent.add(key);
-          if (outcome.failureKind === "quota-exhausted") stage.creditSpent.add(key);
+        if (stage.keyCount > 1 && accountFailure(outcome2)) {
+          if (outcome2.failureKind === "quota-exhausted" || outcome2.failureKind === "authentication-failed") stage.spent.add(key);
+          if (outcome2.failureKind === "quota-exhausted") stage.creditSpent.add(key);
           const next = Array.from({ length: stage.keyCount - 1 }, (_, step) => (key + step + 1) % stage.keyCount).find((index) => !keysTried.has(index) && !stage.spent.has(index));
           if (next !== void 0) {
-            const reason = accountReason(outcome, route.provider);
-            console.log(`[Lane ${lane.id}/${model2.id}] key ${key + 1} of ${stage.keyCount} could not serve (${outcome.failureKind || "rate limited"}, HTTP ${outcome.httpStatus ?? "none"}); sending the same request once with key ${next + 1} of the Lane ${route.credentialLane} slot.`);
+            const reason = accountReason(outcome2, route.provider);
+            console.log(`[Lane ${lane.id}/${model2.id}] key ${key + 1} of ${stage.keyCount} could not serve (${outcome2.failureKind || "rate limited"}, HTTP ${outcome2.httpStatus ?? "none"}); sending the same request once with key ${next + 1} of the Lane ${route.credentialLane} slot.`);
             steps.push({ key: next, from: { index: key, reason } });
             continue;
           }
@@ -2343,7 +2481,7 @@ ${requestError || ""}`;
       if (served) return served;
     }
     const plans2 = [first, ...later].map((route) => route.provider);
-    if (paid && !bestPartial && onlyQuota && plans2.every((provider) => quotaProviders.has(provider))) {
+    if (paid && !bestPartial && onlyQuota && plans2.every((provider2) => quotaProviders.has(provider2))) {
       const resort = routeTo(lane, model, paid);
       if (!resort) {
         console.log(`[Lane ${lane.id}] ${plans2.join(" and ")} all report a spent quota, but the Lane ${slotOf(lane, paid.provider)} slot holds no ${paid.provider} credentials for the last resort.`);
@@ -2372,19 +2510,44 @@ ${requestError || ""}`;
       }
     }
     if (bestPartial) return bestPartial;
-    const failText = lastFailureKind === "report-invalid" ? `The model returned a response, but its report did not satisfy the evidence contract. ${lastReportError}` : (lastResponseText || lastRequestError || "").trim();
-    const gatewayBlocked = lastFailureKind === "gateway-blocked";
+    const allQuota = onlyQuota && quotaNotes.length > 0;
+    const { response, responseText, requestError, failureKind, reportError, outcome, provider, closedStream } = !allQuota && lastNonQuota || {
+      response: lastResponse,
+      responseText: lastResponseText,
+      requestError: lastRequestError,
+      failureKind: lastFailureKind,
+      reportError: lastReportError,
+      outcome: lastOutcome,
+      provider: lastProvider,
+      closedStream: lastClosedStream
+    };
+    const failText = failureKind === "report-invalid" ? `The model returned a response, but its report did not satisfy the evidence contract. ${reportError}` : (outcome || responseText || requestError || "").trim();
+    const gatewayBlocked = failureKind === "gateway-blocked";
     const upstreamExhausted = failText.includes("failover_exhausted");
-    const status = lastResponse?.status ?? "request failed";
+    const status = response?.status;
     const isServerSide = typeof status === "number" && status >= 500;
     const stoppedSummary = `Review attempts did not produce a usable response. Tried: ${tried.join("; ")}.`;
     const fence = "```";
     const snippet = failText.replace(/`/g, "'").slice(0, 600);
-    const planNotes = quotaNotes.filter((note) => note.action);
-    const quotaAction = planNotes.length && lastFailureKind === "quota-exhausted" && lastProvider !== "anthropic" ? `Action needed: ${planNotes.map((note) => note.action).join("; ")}. This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review.` : "";
+    const quotaHeadlines = quotaNotes.map((note) => note.headline).join("\uFF1B");
+    const fallbackOnlyQuota = quotaNotes.every((note) => note.provider !== first.provider);
+    const quotaBanner = allQuota || primaryQuota ? `> \u26D4 \u989D\u5EA6\u7528\u5C3D\uFF0C\u4E0D\u662F\u9650\u6D41\uFF1A${quotaHeadlines}\u3002` : fallbackOnlyQuota ? `> \u2139\uFE0F \u5907\u7528\u4F9B\u5E94\u5546\u672A\u63A5\u4F4F\uFF1A${quotaHeadlines}\uFF1B\u672C\u8F6E\u4E3B\u5931\u8D25\u5E76\u975E\u989D\u5EA6\u7528\u5C3D\uFF0C\u89C1\u4E0B\u65B9\u3002` : `> \u2139\uFE0F \u90E8\u5206\u8D26\u53F7\u989D\u5EA6\u5DF2\u7528\u5B8C\uFF1A${quotaHeadlines}\uFF1B\u672C\u8F6E\u4E3B\u5931\u8D25\u5E76\u975E\u989D\u5EA6\u7528\u5C3D\uFF0C\u89C1\u4E0B\u65B9\u3002`;
+    let quotaAction = "";
+    if (allQuota) {
+      const reasons = quotaNotes.map((note) => note.action).join("; ");
+      if (quotaNotes.length === 1 && quotaNotes[0].credit && quotaNotes[0].provider === "anthropic") {
+        quotaAction = finalStage?.keyCount > 1 && finalStage.creditSpent.size === finalStage.keyCount ? `Action needed: the Anthropic API credit balance is exhausted on every key in the Lane ${lane.id} slot. Wait for the next credit grant or add credit; another model on the same accounts cannot recover the review.` : "Action needed: the Anthropic API credit balance is exhausted. Wait for the next credit grant or add credit; another model on the same account cannot recover the review.";
+      } else if (quotaNotes.every((note) => note.credit)) {
+        quotaAction = `Action needed: ${reasons}. This is an exhausted API credit balance, not a periodic plan quota: wait for the next credit grant or add credit; another model on the same account cannot recover the review.`;
+      } else if (quotaNotes.every((note) => !note.credit)) {
+        quotaAction = `Action needed: ${reasons}. This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review.`;
+      } else {
+        quotaAction = `Action needed: ${reasons}. Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review.`;
+      }
+    }
     const review = [
       "> AI review was not generated.",
-      ...quotaNotes.length ? ["", `> \u26D4 \u989D\u5EA6\u7528\u5C3D\uFF0C\u4E0D\u662F\u9650\u6D41\uFF1A${quotaNotes.map((note) => note.headline).join("\uFF1B")}\u3002`] : [],
+      ...quotaNotes.length ? ["", quotaBanner] : [],
       "",
       gatewayBlocked ? "GitHub Actions reached the configured API endpoint, but the gateway returned an HTML verification page instead of JSON." : stoppedSummary,
       "",
@@ -2395,7 +2558,7 @@ ${snippet}
 ${fence}
 </details>` : "",
       "",
-      gatewayBlocked ? "Action needed: use an API base URL that GitHub-hosted runners can reach without browser verification, or run this workflow on a self-hosted runner." : lastFailureKind === "quota-exhausted" ? lastProvider === "anthropic" ? finalStage?.keyCount > 1 && finalStage.creditSpent.size === finalStage.keyCount ? `Action needed: the Anthropic API credit balance is exhausted on every key in the Lane ${lane.id} slot. Wait for the next credit grant or add credit; another model on the same accounts cannot recover the review.` : "Action needed: the Anthropic API credit balance is exhausted. Wait for the next credit grant or add credit; another model on the same account cannot recover the review." : quotaAction || `Action needed: the ${lastProvider} plan quota is exhausted. Wait for its reset or replenish it; retrying another model on the same plan cannot recover the review.` : lastFailureKind === "authentication-failed" ? `Action needed: repair Lane ${lane.id} credentials or authentication configuration.` : lastFailureKind === "endpoint-unavailable" ? `Action needed: Lane ${lane.id} endpoint remained unreachable after one attempt per configured model and route.` : upstreamExhausted ? `Action needed: \`failover_exhausted\` means Lane ${lane.id} ran out of healthy upstreams. Inspect its central repository config and provider health.` : lastOutcome ? "Action needed: inspect finish_reason and token usage for the incomplete or empty final response. This is not an authentication/HTTP failure and does not by itself prove an input-context limit." : lastFailureKind === "report-invalid" ? "Action needed: inspect the local report-contract reason above. This is a report-format or code-evidence issue, not an authentication or HTTP failure; no parameter-repair resend was made." : lastClosedStream ? `Action needed: this is not a rate limit, quota or authentication failure. ${lastProvider} accepted the request (HTTP ${lastClosedStream.httpStatus}) and streamed for ${lastClosedStream.seconds} s, then closed the stream before the model finished. Rerun with /review; a close at about the same time again points to a stream-length limit on that provider.` : isServerSide ? "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above \u2014 most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage." : "Action needed: inspect the upstream response above to identify the request or auth problem."
+      quotaAction || (gatewayBlocked ? "Action needed: use an API base URL that GitHub-hosted runners can reach without browser verification, or run this workflow on a self-hosted runner." : failureKind === "authentication-failed" ? `Action needed: repair Lane ${lane.id} credentials or authentication configuration.` : failureKind === "endpoint-unavailable" ? `Action needed: Lane ${lane.id} endpoint remained unreachable after one attempt per configured model and route.` : upstreamExhausted ? `Action needed: \`failover_exhausted\` means Lane ${lane.id} ran out of healthy upstreams. Inspect its central repository config and provider health.` : outcome ? "Action needed: inspect finish_reason and token usage for the incomplete or empty final response. This is not an authentication/HTTP failure and does not by itself prove an input-context limit." : failureKind === "report-invalid" ? "Action needed: inspect the local report-contract reason above. This is a report-format or code-evidence issue, not an authentication or HTTP failure; no parameter-repair resend was made." : closedStream ? `Action needed: this is not a rate limit, quota or authentication failure. ${provider} accepted the request (HTTP ${closedStream.httpStatus}) and streamed for ${closedStream.seconds} s, then closed the stream before the model finished. Rerun with /review; a close at about the same time again points to a stream-length limit on that provider.` : isServerSide ? "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above \u2014 most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage." : "Action needed: inspect the upstream response above to identify the request or auth problem.")
     ].join("\n");
     return {
       lane,
@@ -2404,7 +2567,7 @@ ${fence}
       reasoningLength: 0,
       status: "diagnostic",
       routeDetail: routeNotes.map((note) => note.text).join("\uFF1B"),
-      onlyQuota: onlyQuota && quotaNotes.length > 0
+      onlyQuota: allQuota
     };
   }
   await statusPublisher.publish();
