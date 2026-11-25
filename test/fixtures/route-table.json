@@ -184,7 +184,7 @@
     ],
     "footer": "Lane A: muse-spark-1.3-contributor",
     "tried": "muse-spark-1.3-contributor -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); muse-spark-1.3-contributor via command-code meta/muse-spark-1.3-contributor -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted. Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    },
    "B": {
     "attempts": [
@@ -277,11 +277,11 @@
     "status": "diagnostic",
     "title": "## AI PR Review · Lane A · Muse Spark 1.3 Contributor",
     "banners": [
-     "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）。"
+     "> ℹ️ 备用供应商未接住：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；本轮主失败并非额度用尽，见下方。"
     ],
     "footer": "Lane A: muse-spark-1.3-contributor",
     "tried": "muse-spark-1.3-contributor -> HTTP 503 (1 attempt(s)); muse-spark-1.3-contributor via command-code meta/muse-spark-1.3-contributor -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the command-code plan quota is exhausted. Wait for its reset or replenish it; retrying another model on the same plan cannot recover the review."
+    "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
    },
    "B": {
     "attempts": [
@@ -291,11 +291,11 @@
     "status": "diagnostic",
     "title": "## AI PR Review · Lane B · Claude Haiku 5.5",
     "banners": [
-     "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）。"
+     "> ℹ️ 备用供应商未接住：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；本轮主失败并非额度用尽，见下方。"
     ],
     "footer": "Lane B: claude-haiku-5-5",
     "tried": "claude-haiku-5-5 -> HTTP 503 (1 attempt(s)); claude-haiku-5-5 via command-code claude-haiku-5-5 -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the command-code plan quota is exhausted. Wait for its reset or replenish it; retrying another model on the same plan cannot recover the review."
+    "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
    },
    "C": {
     "attempts": [
@@ -305,11 +305,11 @@
     "status": "diagnostic",
     "title": "## AI PR Review · Lane C · DeepSeek V4.1 Flash",
     "banners": [
-     "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）。"
+     "> ℹ️ 备用供应商未接住：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；本轮主失败并非额度用尽，见下方。"
     ],
     "footer": "Lane C: deepseek-v4.1-flash",
     "tried": "deepseek-v4.1-flash -> HTTP 503 (1 attempt(s)); deepseek-v4.1-flash via command-code deepseek/deepseek-v4.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the command-code plan quota is exhausted. Wait for its reset or replenish it; retrying another model on the same plan cannot recover the review."
+    "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
    }
   }
  },
@@ -489,7 +489,7 @@
     ],
     "footer": "Lane A: muse-spark-1.3-contributor",
     "tried": "muse-spark-1.3-contributor -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); muse-spark-1.3-contributor via command-code meta/muse-spark-1.3-contributor -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted. Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    },
    "B": {
     "attempts": [
@@ -520,7 +520,7 @@
     ],
     "footer": "Lane C: deepseek-v4.1-flash",
     "tried": "deepseek-v4.1-flash -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); deepseek-v4.1-flash via command-code deepseek/deepseek-v4.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the openai plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted; the openai plan quota is exhausted (plan usage limit). Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    }
   }
  },
@@ -580,7 +580,7 @@
     ],
     "footer": "Lane A: muse-spark-1.3-contributor",
     "tried": "muse-spark-1.3-contributor -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); muse-spark-1.3-contributor via command-code meta/muse-spark-1.3-contributor -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted. Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    },
    "B": {
     "attempts": [
@@ -595,7 +595,7 @@
     ],
     "footer": "Lane B: claude-haiku-5-5",
     "tried": "claude-haiku-5-5 -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); claude-haiku-5-5 via command-code claude-haiku-5-5 -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); claude-haiku-5-5 on anthropic (last resort) -> HTTP 402, anthropic credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the Anthropic API credit balance is exhausted. Wait for the next credit grant or add credit; another model on the same account cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted; the Anthropic API credit balance is exhausted. Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    },
    "C": {
     "attempts": [
@@ -611,7 +611,7 @@
     ],
     "footer": "Lane C: deepseek-v4.1-flash",
     "tried": "deepseek-v4.1-flash -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); deepseek-v4.1-flash via command-code deepseek/deepseek-v4.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the openai plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted; the openai plan quota is exhausted (plan usage limit). Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    }
   }
  },
@@ -838,7 +838,7 @@
     ],
     "footer": "Lane A: muse-spark-1.3-contributor",
     "tried": "muse-spark-1.3-contributor -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); muse-spark-1.3-contributor via command-code meta/muse-spark-1.3-contributor -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted. Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    },
    "B": {
     "attempts": [
@@ -931,11 +931,11 @@
     "status": "diagnostic",
     "title": "## AI PR Review · Lane A · Muse Spark 1.3 Contributor",
     "banners": [
-     "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）。"
+     "> ℹ️ 备用供应商未接住：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；本轮主失败并非额度用尽，见下方。"
     ],
     "footer": "Lane A: muse-spark-1.3-contributor",
     "tried": "muse-spark-1.3-contributor -> HTTP 503 (1 attempt(s)); muse-spark-1.3-contributor via command-code meta/muse-spark-1.3-contributor -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the command-code plan quota is exhausted. Wait for its reset or replenish it; retrying another model on the same plan cannot recover the review."
+    "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
    },
    "B": {
     "attempts": [
@@ -945,11 +945,11 @@
     "status": "diagnostic",
     "title": "## AI PR Review · Lane B · Claude Haiku 5.5",
     "banners": [
-     "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）。"
+     "> ℹ️ 备用供应商未接住：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；本轮主失败并非额度用尽，见下方。"
     ],
     "footer": "Lane B: claude-haiku-5-5",
     "tried": "claude-haiku-5-5 -> HTTP 503 (1 attempt(s)); claude-haiku-5-5 via command-code claude-haiku-5-5 -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the command-code plan quota is exhausted. Wait for its reset or replenish it; retrying another model on the same plan cannot recover the review."
+    "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
    },
    "C": {
     "attempts": [
@@ -959,11 +959,11 @@
     "status": "diagnostic",
     "title": "## AI PR Review · Lane C · DeepSeek V4.1 Flash",
     "banners": [
-     "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）。"
+     "> ℹ️ 备用供应商未接住：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；本轮主失败并非额度用尽，见下方。"
     ],
     "footer": "Lane C: deepseek-v4.1-flash",
     "tried": "deepseek-v4.1-flash -> HTTP 503 (1 attempt(s)); deepseek-v4.1-flash via command-code deepseek/deepseek-v4.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the command-code plan quota is exhausted. Wait for its reset or replenish it; retrying another model on the same plan cannot recover the review."
+    "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
    }
   }
  },
@@ -1143,7 +1143,7 @@
     ],
     "footer": "Lane A: muse-spark-1.3-contributor",
     "tried": "muse-spark-1.3-contributor -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); muse-spark-1.3-contributor via command-code meta/muse-spark-1.3-contributor -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted. Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    },
    "B": {
     "attempts": [
@@ -1174,7 +1174,7 @@
     ],
     "footer": "Lane C: deepseek-v4.1-flash",
     "tried": "deepseek-v4.1-flash -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); deepseek-v4.1-flash via command-code deepseek/deepseek-v4.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the openai plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted; the openai plan quota is exhausted (plan usage limit). Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    }
   }
  },
@@ -1234,7 +1234,7 @@
     ],
     "footer": "Lane A: muse-spark-1.3-contributor",
     "tried": "muse-spark-1.3-contributor -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); muse-spark-1.3-contributor via command-code meta/muse-spark-1.3-contributor -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted. Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    },
    "B": {
     "attempts": [
@@ -1249,7 +1249,7 @@
     ],
     "footer": "Lane B: claude-haiku-5-5",
     "tried": "claude-haiku-5-5 -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); claude-haiku-5-5 via command-code claude-haiku-5-5 -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); claude-haiku-5-5 on anthropic (last resort) -> HTTP 402, anthropic credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the Anthropic API credit balance is exhausted. Wait for the next credit grant or add credit; another model on the same account cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted; the Anthropic API credit balance is exhausted. Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    },
    "C": {
     "attempts": [
@@ -1265,7 +1265,7 @@
     ],
     "footer": "Lane C: deepseek-v4.1-flash",
     "tried": "deepseek-v4.1-flash -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); deepseek-v4.1-flash via command-code deepseek/deepseek-v4.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the openai plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted; the openai plan quota is exhausted (plan usage limit). Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    }
   }
  },
@@ -1492,7 +1492,7 @@
     ],
     "footer": "Lane A: muse-spark-1.3-contributor",
     "tried": "muse-spark-1.3-contributor -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); muse-spark-1.3-contributor via command-code meta/muse-spark-1.3-contributor -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted. Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    },
    "B": {
     "attempts": [
@@ -1585,11 +1585,11 @@
     "status": "diagnostic",
     "title": "## AI PR Review · Lane A · Muse Spark 1.3 Contributor",
     "banners": [
-     "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）。"
+     "> ℹ️ 备用供应商未接住：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；本轮主失败并非额度用尽，见下方。"
     ],
     "footer": "Lane A: muse-spark-1.3-contributor",
     "tried": "muse-spark-1.3-contributor -> HTTP 503 (1 attempt(s)); muse-spark-1.3-contributor via command-code meta/muse-spark-1.3-contributor -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the command-code plan quota is exhausted. Wait for its reset or replenish it; retrying another model on the same plan cannot recover the review."
+    "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
    },
    "B": {
     "attempts": [
@@ -1599,11 +1599,11 @@
     "status": "diagnostic",
     "title": "## AI PR Review · Lane B · Claude Haiku 5.5",
     "banners": [
-     "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）。"
+     "> ℹ️ 备用供应商未接住：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；本轮主失败并非额度用尽，见下方。"
     ],
     "footer": "Lane B: claude-haiku-5-5",
     "tried": "claude-haiku-5-5 -> HTTP 503 (1 attempt(s)); claude-haiku-5-5 via command-code claude-haiku-5-5 -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the command-code plan quota is exhausted. Wait for its reset or replenish it; retrying another model on the same plan cannot recover the review."
+    "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
    },
    "C": {
     "attempts": [
@@ -1613,11 +1613,11 @@
     "status": "diagnostic",
     "title": "## AI PR Review · Lane C · DeepSeek V4.1 Flash",
     "banners": [
-     "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）。"
+     "> ℹ️ 备用供应商未接住：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；本轮主失败并非额度用尽，见下方。"
     ],
     "footer": "Lane C: deepseek-v4.1-flash",
     "tried": "deepseek-v4.1-flash -> HTTP 503 (1 attempt(s)); deepseek-v4.1-flash via command-code deepseek/deepseek-v4.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the command-code plan quota is exhausted. Wait for its reset or replenish it; retrying another model on the same plan cannot recover the review."
+    "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
    }
   }
  },
@@ -1797,7 +1797,7 @@
     ],
     "footer": "Lane A: muse-spark-1.3-contributor",
     "tried": "muse-spark-1.3-contributor -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); muse-spark-1.3-contributor via command-code meta/muse-spark-1.3-contributor -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted. Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    },
    "B": {
     "attempts": [
@@ -1828,7 +1828,7 @@
     ],
     "footer": "Lane C: deepseek-v4.1-flash",
     "tried": "deepseek-v4.1-flash -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); deepseek-v4.1-flash via command-code deepseek/deepseek-v4.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the openai plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted; the openai plan quota is exhausted (plan usage limit). Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    }
   }
  },
@@ -1888,7 +1888,7 @@
     ],
     "footer": "Lane A: muse-spark-1.3-contributor",
     "tried": "muse-spark-1.3-contributor -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); muse-spark-1.3-contributor via command-code meta/muse-spark-1.3-contributor -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted. Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    },
    "B": {
     "attempts": [
@@ -1903,7 +1903,7 @@
     ],
     "footer": "Lane B: claude-haiku-5-5",
     "tried": "claude-haiku-5-5 -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); claude-haiku-5-5 via command-code claude-haiku-5-5 -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); claude-haiku-5-5 on anthropic (last resort) -> HTTP 402, anthropic credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the Anthropic API credit balance is exhausted. Wait for the next credit grant or add credit; another model on the same account cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted; the Anthropic API credit balance is exhausted. Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    },
    "C": {
     "attempts": [
@@ -1919,7 +1919,7 @@
     ],
     "footer": "Lane C: deepseek-v4.1-flash",
     "tried": "deepseek-v4.1-flash -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); deepseek-v4.1-flash via command-code deepseek/deepseek-v4.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the openai plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted; the openai plan quota is exhausted (plan usage limit). Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    }
   }
  },
@@ -2150,7 +2150,7 @@
     ],
     "footer": "Lane A: muse-spark-1.3-contributor",
     "tried": "muse-spark-1.3-contributor -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); muse-spark-1.3-contributor via command-code meta/muse-spark-1.3-contributor -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted. Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    },
    "B": {
     "attempts": [
@@ -2236,11 +2236,11 @@
     "status": "diagnostic",
     "title": "## AI PR Review · Lane A · Muse Spark 1.3 Contributor",
     "banners": [
-     "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）。"
+     "> ℹ️ 备用供应商未接住：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；本轮主失败并非额度用尽，见下方。"
     ],
     "footer": "Lane A: muse-spark-1.3-contributor",
     "tried": "muse-spark-1.3-contributor -> HTTP 503 (1 attempt(s)); muse-spark-1.3-contributor via command-code meta/muse-spark-1.3-contributor -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the command-code plan quota is exhausted. Wait for its reset or replenish it; retrying another model on the same plan cannot recover the review."
+    "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
    },
    "B": {
     "attempts": [
@@ -2463,7 +2463,7 @@
     ],
     "footer": "Lane A: muse-spark-1.3-contributor",
     "tried": "muse-spark-1.3-contributor -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); muse-spark-1.3-contributor via command-code meta/muse-spark-1.3-contributor -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted. Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    },
    "B": {
     "attempts": [
@@ -2555,7 +2555,7 @@
     ],
     "footer": "Lane A: muse-spark-1.3-contributor",
     "tried": "muse-spark-1.3-contributor -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); muse-spark-1.3-contributor via command-code meta/muse-spark-1.3-contributor -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted. Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    },
    "B": {
     "attempts": [
@@ -2571,7 +2571,7 @@
     ],
     "footer": "Lane B: claude-haiku-5-5",
     "tried": "claude-sonnet-5-5 -> HTTP 402, anthropic credit balance exhausted (1 attempt(s)); claude-haiku-5-5 -> HTTP 402, anthropic credit balance exhausted (1 attempt(s)); claude-haiku-5-5 via opencode-go claude-haiku-5-5 -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); claude-haiku-5-5 via command-code claude-haiku-5-5 -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "action": "Action needed: the Anthropic API credit balance is exhausted; the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted. Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    },
    "C": {
     "attempts": [
@@ -2588,7 +2588,7 @@
     ],
     "footer": "Lane C: gpt-6.1-terra",
     "tried": "gpt-6.2-sol (key 1/2) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6.2-sol (key 2/2) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6.1-terra (key 1/2) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6.1-terra via opencode-go gpt-6-luna -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); gpt-6.1-terra via command-code gpt-6-luna -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the openai plan quota is exhausted (plan usage limit); the opencode-go plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "action": "Action needed: the openai plan quota is exhausted (plan usage limit); the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted. Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    }
   }
  },
@@ -2817,7 +2817,7 @@
     ],
     "footer": "Lane A: muse-spark-1.3-contributor",
     "tried": "muse-spark-1.3-contributor -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); muse-spark-1.3-contributor via command-code meta/muse-spark-1.3-contributor -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted. Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    },
    "B": {
     "attempts": [
@@ -2910,11 +2910,11 @@
     "status": "diagnostic",
     "title": "## AI PR Review · Lane A · Muse Spark 1.3 Contributor",
     "banners": [
-     "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）。"
+     "> ℹ️ 备用供应商未接住：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；本轮主失败并非额度用尽，见下方。"
     ],
     "footer": "Lane A: muse-spark-1.3-contributor",
     "tried": "muse-spark-1.3-contributor -> HTTP 503 (1 attempt(s)); muse-spark-1.3-contributor via command-code meta/muse-spark-1.3-contributor -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the command-code plan quota is exhausted. Wait for its reset or replenish it; retrying another model on the same plan cannot recover the review."
+    "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
    },
    "B": {
     "attempts": [
@@ -2924,11 +2924,11 @@
     "status": "diagnostic",
     "title": "## AI PR Review · Lane B · Claude Haiku 5.5",
     "banners": [
-     "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）。"
+     "> ℹ️ 备用供应商未接住：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；本轮主失败并非额度用尽，见下方。"
     ],
     "footer": "Lane B: claude-haiku-5-5",
     "tried": "claude-haiku-5-5 -> HTTP 503 (1 attempt(s)); claude-haiku-5-5 via command-code claude-haiku-5-5 -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the command-code plan quota is exhausted. Wait for its reset or replenish it; retrying another model on the same plan cannot recover the review."
+    "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
    },
    "C": {
     "attempts": [
@@ -2938,11 +2938,11 @@
     "status": "diagnostic",
     "title": "## AI PR Review · Lane C · DeepSeek V4.1 Flash",
     "banners": [
-     "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）。"
+     "> ℹ️ 备用供应商未接住：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；本轮主失败并非额度用尽，见下方。"
     ],
     "footer": "Lane C: deepseek-v4.1-flash",
     "tried": "deepseek-v4.1-flash -> HTTP 503 (1 attempt(s)); deepseek-v4.1-flash via command-code deepseek/deepseek-v4.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the command-code plan quota is exhausted. Wait for its reset or replenish it; retrying another model on the same plan cannot recover the review."
+    "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
    }
   }
  },
@@ -3122,7 +3122,7 @@
     ],
     "footer": "Lane A: muse-spark-1.3-contributor",
     "tried": "muse-spark-1.3-contributor -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); muse-spark-1.3-contributor via command-code meta/muse-spark-1.3-contributor -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted. Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    },
    "B": {
     "attempts": [
@@ -3153,7 +3153,7 @@
     ],
     "footer": "Lane C: deepseek-v4.1-flash",
     "tried": "deepseek-v4.1-flash -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); deepseek-v4.1-flash via command-code deepseek/deepseek-v4.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the openai plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted; the openai plan quota is exhausted (plan usage limit). Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    }
   }
  },
@@ -3213,7 +3213,7 @@
     ],
     "footer": "Lane A: muse-spark-1.3-contributor",
     "tried": "muse-spark-1.3-contributor -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); muse-spark-1.3-contributor via command-code meta/muse-spark-1.3-contributor -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted. Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    },
    "B": {
     "attempts": [
@@ -3228,7 +3228,7 @@
     ],
     "footer": "Lane B: claude-haiku-5-5",
     "tried": "claude-haiku-5-5 -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); claude-haiku-5-5 via command-code claude-haiku-5-5 -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); claude-haiku-5-5 on anthropic (last resort) -> HTTP 402, anthropic credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the Anthropic API credit balance is exhausted. Wait for the next credit grant or add credit; another model on the same account cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted; the Anthropic API credit balance is exhausted. Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    },
    "C": {
     "attempts": [
@@ -3244,7 +3244,7 @@
     ],
     "footer": "Lane C: deepseek-v4.1-flash",
     "tried": "deepseek-v4.1-flash -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); deepseek-v4.1-flash via command-code deepseek/deepseek-v4.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the openai plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted; the openai plan quota is exhausted (plan usage limit). Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    }
   }
  },
@@ -3471,7 +3471,7 @@
     ],
     "footer": "Lane A: muse-spark-1.3-contributor",
     "tried": "muse-spark-1.3-contributor -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); muse-spark-1.3-contributor via command-code meta/muse-spark-1.3-contributor -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted. Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    },
    "B": {
     "attempts": [
@@ -3564,11 +3564,11 @@
     "status": "diagnostic",
     "title": "## AI PR Review · Lane A · Muse Spark 1.3 Contributor",
     "banners": [
-     "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）。"
+     "> ℹ️ 备用供应商未接住：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；本轮主失败并非额度用尽，见下方。"
     ],
     "footer": "Lane A: muse-spark-1.3-contributor",
     "tried": "muse-spark-1.3-contributor -> HTTP 503 (1 attempt(s)); muse-spark-1.3-contributor via command-code meta/muse-spark-1.3-contributor -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the command-code plan quota is exhausted. Wait for its reset or replenish it; retrying another model on the same plan cannot recover the review."
+    "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
    },
    "B": {
     "attempts": [
@@ -3578,11 +3578,11 @@
     "status": "diagnostic",
     "title": "## AI PR Review · Lane B · Claude Haiku 5.5",
     "banners": [
-     "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）。"
+     "> ℹ️ 备用供应商未接住：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；本轮主失败并非额度用尽，见下方。"
     ],
     "footer": "Lane B: claude-haiku-5-5",
     "tried": "claude-haiku-5-5 -> HTTP 503 (1 attempt(s)); claude-haiku-5-5 via command-code claude-haiku-5-5 -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the command-code plan quota is exhausted. Wait for its reset or replenish it; retrying another model on the same plan cannot recover the review."
+    "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
    },
    "C": {
     "attempts": [
@@ -3592,11 +3592,11 @@
     "status": "diagnostic",
     "title": "## AI PR Review · Lane C · DeepSeek V4.1 Flash",
     "banners": [
-     "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）。"
+     "> ℹ️ 备用供应商未接住：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；本轮主失败并非额度用尽，见下方。"
     ],
     "footer": "Lane C: deepseek-v4.1-flash",
     "tried": "deepseek-v4.1-flash -> HTTP 503 (1 attempt(s)); deepseek-v4.1-flash via command-code deepseek/deepseek-v4.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the command-code plan quota is exhausted. Wait for its reset or replenish it; retrying another model on the same plan cannot recover the review."
+    "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
    }
   }
  },
@@ -3776,7 +3776,7 @@
     ],
     "footer": "Lane A: muse-spark-1.3-contributor",
     "tried": "muse-spark-1.3-contributor -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); muse-spark-1.3-contributor via command-code meta/muse-spark-1.3-contributor -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted. Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    },
    "B": {
     "attempts": [
@@ -3807,7 +3807,7 @@
     ],
     "footer": "Lane C: deepseek-v4.1-flash",
     "tried": "deepseek-v4.1-flash -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); deepseek-v4.1-flash via command-code deepseek/deepseek-v4.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the openai plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted; the openai plan quota is exhausted (plan usage limit). Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    }
   }
  },
@@ -3867,7 +3867,7 @@
     ],
     "footer": "Lane A: muse-spark-1.3-contributor",
     "tried": "muse-spark-1.3-contributor -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); muse-spark-1.3-contributor via command-code meta/muse-spark-1.3-contributor -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted. Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    },
    "B": {
     "attempts": [
@@ -3882,7 +3882,7 @@
     ],
     "footer": "Lane B: claude-haiku-5-5",
     "tried": "claude-haiku-5-5 -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); claude-haiku-5-5 via command-code claude-haiku-5-5 -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); claude-haiku-5-5 on anthropic (last resort) -> HTTP 402, anthropic credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the Anthropic API credit balance is exhausted. Wait for the next credit grant or add credit; another model on the same account cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted; the Anthropic API credit balance is exhausted. Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    },
    "C": {
     "attempts": [
@@ -3898,7 +3898,7 @@
     ],
     "footer": "Lane C: deepseek-v4.1-flash",
     "tried": "deepseek-v4.1-flash -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); deepseek-v4.1-flash via command-code deepseek/deepseek-v4.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the openai plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted; the openai plan quota is exhausted (plan usage limit). Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    }
   }
  },
@@ -4125,7 +4125,7 @@
     ],
     "footer": "Lane A: muse-spark-1.3-contributor",
     "tried": "muse-spark-1.3-contributor -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); muse-spark-1.3-contributor via command-code meta/muse-spark-1.3-contributor -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted. Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    },
    "B": {
     "attempts": [
@@ -4218,11 +4218,11 @@
     "status": "diagnostic",
     "title": "## AI PR Review · Lane A · Muse Spark 1.3 Contributor",
     "banners": [
-     "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）。"
+     "> ℹ️ 备用供应商未接住：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；本轮主失败并非额度用尽，见下方。"
     ],
     "footer": "Lane A: muse-spark-1.3-contributor",
     "tried": "muse-spark-1.3-contributor -> HTTP 503 (1 attempt(s)); muse-spark-1.3-contributor via command-code meta/muse-spark-1.3-contributor -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the command-code plan quota is exhausted. Wait for its reset or replenish it; retrying another model on the same plan cannot recover the review."
+    "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
    },
    "B": {
     "attempts": [
@@ -4232,11 +4232,11 @@
     "status": "diagnostic",
     "title": "## AI PR Review · Lane B · Claude Haiku 5.5",
     "banners": [
-     "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）。"
+     "> ℹ️ 备用供应商未接住：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；本轮主失败并非额度用尽，见下方。"
     ],
     "footer": "Lane B: claude-haiku-5-5",
     "tried": "claude-haiku-5-5 -> HTTP 503 (1 attempt(s)); claude-haiku-5-5 via command-code claude-haiku-5-5 -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the command-code plan quota is exhausted. Wait for its reset or replenish it; retrying another model on the same plan cannot recover the review."
+    "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
    },
    "C": {
     "attempts": [
@@ -4246,11 +4246,11 @@
     "status": "diagnostic",
     "title": "## AI PR Review · Lane C · DeepSeek V4.1 Flash",
     "banners": [
-     "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）。"
+     "> ℹ️ 备用供应商未接住：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；本轮主失败并非额度用尽，见下方。"
     ],
     "footer": "Lane C: deepseek-v4.1-flash",
     "tried": "deepseek-v4.1-flash -> HTTP 503 (1 attempt(s)); deepseek-v4.1-flash via command-code deepseek/deepseek-v4.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the command-code plan quota is exhausted. Wait for its reset or replenish it; retrying another model on the same plan cannot recover the review."
+    "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
    }
   }
  },
@@ -4430,7 +4430,7 @@
     ],
     "footer": "Lane A: muse-spark-1.3-contributor",
     "tried": "muse-spark-1.3-contributor -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); muse-spark-1.3-contributor via command-code meta/muse-spark-1.3-contributor -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted. Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    },
    "B": {
     "attempts": [
@@ -4461,7 +4461,7 @@
     ],
     "footer": "Lane C: deepseek-v4.1-flash",
     "tried": "deepseek-v4.1-flash -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); deepseek-v4.1-flash via command-code deepseek/deepseek-v4.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the openai plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted; the openai plan quota is exhausted (plan usage limit). Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    }
   }
  },
@@ -4521,7 +4521,7 @@
     ],
     "footer": "Lane A: muse-spark-1.3-contributor",
     "tried": "muse-spark-1.3-contributor -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); muse-spark-1.3-contributor via command-code meta/muse-spark-1.3-contributor -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted. Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    },
    "B": {
     "attempts": [
@@ -4536,7 +4536,7 @@
     ],
     "footer": "Lane B: claude-haiku-5-5",
     "tried": "claude-haiku-5-5 -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); claude-haiku-5-5 via command-code claude-haiku-5-5 -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); claude-haiku-5-5 on anthropic (last resort) -> HTTP 402, anthropic credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the Anthropic API credit balance is exhausted. Wait for the next credit grant or add credit; another model on the same account cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted; the Anthropic API credit balance is exhausted. Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    },
    "C": {
     "attempts": [
@@ -4552,7 +4552,7 @@
     ],
     "footer": "Lane C: deepseek-v4.1-flash",
     "tried": "deepseek-v4.1-flash -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); deepseek-v4.1-flash via command-code deepseek/deepseek-v4.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the openai plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted; the openai plan quota is exhausted (plan usage limit). Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    }
   }
  },
@@ -4779,7 +4779,7 @@
     ],
     "footer": "Lane A: muse-spark-1.3-contributor",
     "tried": "muse-spark-1.3-contributor -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); muse-spark-1.3-contributor via command-code meta/muse-spark-1.3-contributor -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted. Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    },
    "B": {
     "attempts": [
@@ -4872,11 +4872,11 @@
     "status": "diagnostic",
     "title": "## AI PR Review · Lane A · Muse Spark 1.3 Contributor",
     "banners": [
-     "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）。"
+     "> ℹ️ 备用供应商未接住：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；本轮主失败并非额度用尽，见下方。"
     ],
     "footer": "Lane A: muse-spark-1.3-contributor",
     "tried": "muse-spark-1.3-contributor -> HTTP 503 (1 attempt(s)); muse-spark-1.3-contributor via command-code meta/muse-spark-1.3-contributor -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the command-code plan quota is exhausted. Wait for its reset or replenish it; retrying another model on the same plan cannot recover the review."
+    "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
    },
    "B": {
     "attempts": [
@@ -4886,11 +4886,11 @@
     "status": "diagnostic",
     "title": "## AI PR Review · Lane B · Claude Haiku 5.5",
     "banners": [
-     "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）。"
+     "> ℹ️ 备用供应商未接住：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；本轮主失败并非额度用尽，见下方。"
     ],
     "footer": "Lane B: claude-haiku-5-5",
     "tried": "claude-haiku-5-5 -> HTTP 503 (1 attempt(s)); claude-haiku-5-5 via command-code claude-haiku-5-5 -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the command-code plan quota is exhausted. Wait for its reset or replenish it; retrying another model on the same plan cannot recover the review."
+    "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
    },
    "C": {
     "attempts": [
@@ -4900,11 +4900,11 @@
     "status": "diagnostic",
     "title": "## AI PR Review · Lane C · DeepSeek V4.1 Flash",
     "banners": [
-     "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）。"
+     "> ℹ️ 备用供应商未接住：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；本轮主失败并非额度用尽，见下方。"
     ],
     "footer": "Lane C: deepseek-v4.1-flash",
     "tried": "deepseek-v4.1-flash -> HTTP 503 (1 attempt(s)); deepseek-v4.1-flash via command-code deepseek/deepseek-v4.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the command-code plan quota is exhausted. Wait for its reset or replenish it; retrying another model on the same plan cannot recover the review."
+    "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
    }
   }
  },
@@ -5084,7 +5084,7 @@
     ],
     "footer": "Lane A: muse-spark-1.3-contributor",
     "tried": "muse-spark-1.3-contributor -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); muse-spark-1.3-contributor via command-code meta/muse-spark-1.3-contributor -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted. Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    },
    "B": {
     "attempts": [
@@ -5115,7 +5115,7 @@
     ],
     "footer": "Lane C: deepseek-v4.1-flash",
     "tried": "deepseek-v4.1-flash -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); deepseek-v4.1-flash via command-code deepseek/deepseek-v4.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the openai plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted; the openai plan quota is exhausted (plan usage limit). Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    }
   }
  },
@@ -5175,7 +5175,7 @@
     ],
     "footer": "Lane A: muse-spark-1.3-contributor",
     "tried": "muse-spark-1.3-contributor -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); muse-spark-1.3-contributor via command-code meta/muse-spark-1.3-contributor -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted. Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    },
    "B": {
     "attempts": [
@@ -5190,7 +5190,7 @@
     ],
     "footer": "Lane B: claude-haiku-5-5",
     "tried": "claude-haiku-5-5 -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); claude-haiku-5-5 via command-code claude-haiku-5-5 -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); claude-haiku-5-5 on anthropic (last resort) -> HTTP 402, anthropic credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the Anthropic API credit balance is exhausted. Wait for the next credit grant or add credit; another model on the same account cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted; the Anthropic API credit balance is exhausted. Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    },
    "C": {
     "attempts": [
@@ -5206,7 +5206,7 @@
     ],
     "footer": "Lane C: deepseek-v4.1-flash",
     "tried": "deepseek-v4.1-flash -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); deepseek-v4.1-flash via command-code deepseek/deepseek-v4.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the openai plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted; the openai plan quota is exhausted (plan usage limit). Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    }
   }
  },
@@ -5433,7 +5433,7 @@
     ],
     "footer": "Lane A: muse-spark-1.3-contributor",
     "tried": "muse-spark-1.3-contributor -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); muse-spark-1.3-contributor via command-code meta/muse-spark-1.3-contributor -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted. Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    },
    "B": {
     "attempts": [
@@ -5526,11 +5526,11 @@
     "status": "diagnostic",
     "title": "## AI PR Review · Lane A · Muse Spark 1.3 Contributor",
     "banners": [
-     "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）。"
+     "> ℹ️ 备用供应商未接住：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；本轮主失败并非额度用尽，见下方。"
     ],
     "footer": "Lane A: muse-spark-1.3-contributor",
     "tried": "muse-spark-1.3-contributor -> HTTP 503 (1 attempt(s)); muse-spark-1.3-contributor via command-code meta/muse-spark-1.3-contributor -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the command-code plan quota is exhausted. Wait for its reset or replenish it; retrying another model on the same plan cannot recover the review."
+    "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
    },
    "B": {
     "attempts": [
@@ -5540,11 +5540,11 @@
     "status": "diagnostic",
     "title": "## AI PR Review · Lane B · Claude Haiku 5.5",
     "banners": [
-     "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）。"
+     "> ℹ️ 备用供应商未接住：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；本轮主失败并非额度用尽，见下方。"
     ],
     "footer": "Lane B: claude-haiku-5-5",
     "tried": "claude-haiku-5-5 -> HTTP 503 (1 attempt(s)); claude-haiku-5-5 via command-code claude-haiku-5-5 -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the command-code plan quota is exhausted. Wait for its reset or replenish it; retrying another model on the same plan cannot recover the review."
+    "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
    },
    "C": {
     "attempts": [
@@ -5554,11 +5554,11 @@
     "status": "diagnostic",
     "title": "## AI PR Review · Lane C · DeepSeek V4.1 Flash",
     "banners": [
-     "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）。"
+     "> ℹ️ 备用供应商未接住：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；本轮主失败并非额度用尽，见下方。"
     ],
     "footer": "Lane C: deepseek-v4.1-flash",
     "tried": "deepseek-v4.1-flash -> HTTP 503 (1 attempt(s)); deepseek-v4.1-flash via command-code deepseek/deepseek-v4.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the command-code plan quota is exhausted. Wait for its reset or replenish it; retrying another model on the same plan cannot recover the review."
+    "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
    }
   }
  },
@@ -5738,7 +5738,7 @@
     ],
     "footer": "Lane A: muse-spark-1.3-contributor",
     "tried": "muse-spark-1.3-contributor -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); muse-spark-1.3-contributor via command-code meta/muse-spark-1.3-contributor -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted. Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    },
    "B": {
     "attempts": [
@@ -5769,7 +5769,7 @@
     ],
     "footer": "Lane C: deepseek-v4.1-flash",
     "tried": "deepseek-v4.1-flash -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); deepseek-v4.1-flash via command-code deepseek/deepseek-v4.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the openai plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted; the openai plan quota is exhausted (plan usage limit). Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    }
   }
  },
@@ -5829,7 +5829,7 @@
     ],
     "footer": "Lane A: muse-spark-1.3-contributor",
     "tried": "muse-spark-1.3-contributor -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); muse-spark-1.3-contributor via command-code meta/muse-spark-1.3-contributor -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted. Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    },
    "B": {
     "attempts": [
@@ -5844,7 +5844,7 @@
     ],
     "footer": "Lane B: claude-haiku-5-5",
     "tried": "claude-haiku-5-5 -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); claude-haiku-5-5 via command-code claude-haiku-5-5 -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); claude-haiku-5-5 on anthropic (last resort) -> HTTP 402, anthropic credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the Anthropic API credit balance is exhausted. Wait for the next credit grant or add credit; another model on the same account cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted; the Anthropic API credit balance is exhausted. Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    },
    "C": {
     "attempts": [
@@ -5860,7 +5860,7 @@
     ],
     "footer": "Lane C: deepseek-v4.1-flash",
     "tried": "deepseek-v4.1-flash -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); deepseek-v4.1-flash via command-code deepseek/deepseek-v4.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the openai plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted; the openai plan quota is exhausted (plan usage limit). Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    }
   }
  },
@@ -6087,7 +6087,7 @@
     ],
     "footer": "Lane A: muse-spark-1.3-contributor",
     "tried": "muse-spark-1.3-contributor -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); muse-spark-1.3-contributor via command-code meta/muse-spark-1.3-contributor -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted. Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    },
    "B": {
     "attempts": [
@@ -6180,11 +6180,11 @@
     "status": "diagnostic",
     "title": "## AI PR Review · Lane A · Muse Spark 1.3 Contributor",
     "banners": [
-     "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）。"
+     "> ℹ️ 备用供应商未接住：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；本轮主失败并非额度用尽，见下方。"
     ],
     "footer": "Lane A: muse-spark-1.3-contributor",
     "tried": "muse-spark-1.3-contributor -> HTTP 503 (1 attempt(s)); muse-spark-1.3-contributor via command-code meta/muse-spark-1.3-contributor -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the command-code plan quota is exhausted. Wait for its reset or replenish it; retrying another model on the same plan cannot recover the review."
+    "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
    },
    "B": {
     "attempts": [
@@ -6194,11 +6194,11 @@
     "status": "diagnostic",
     "title": "## AI PR Review · Lane B · Claude Haiku 5.5",
     "banners": [
-     "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）。"
+     "> ℹ️ 备用供应商未接住：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；本轮主失败并非额度用尽，见下方。"
     ],
     "footer": "Lane B: claude-haiku-5-5",
     "tried": "claude-haiku-5-5 -> HTTP 503 (1 attempt(s)); claude-haiku-5-5 via command-code claude-haiku-5-5 -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the command-code plan quota is exhausted. Wait for its reset or replenish it; retrying another model on the same plan cannot recover the review."
+    "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
    },
    "C": {
     "attempts": [
@@ -6208,11 +6208,11 @@
     "status": "diagnostic",
     "title": "## AI PR Review · Lane C · DeepSeek V4.1 Flash",
     "banners": [
-     "> ⛔ 额度用尽，不是限流：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）。"
+     "> ℹ️ 备用供应商未接住：`command-code` 的 API 余额已用完（等待下一次赠送额度或充值）；本轮主失败并非额度用尽，见下方。"
     ],
     "footer": "Lane C: deepseek-v4.1-flash",
     "tried": "deepseek-v4.1-flash -> HTTP 503 (1 attempt(s)); deepseek-v4.1-flash via command-code deepseek/deepseek-v4.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the command-code plan quota is exhausted. Wait for its reset or replenish it; retrying another model on the same plan cannot recover the review."
+    "action": "Action needed: a 5xx originates from the model gateway/account, not from GitHub access. Check the upstream response above — most often quota/balance exhausted, an invalid or expired key, a wrong model name, or a provider-side outage."
    }
   }
  },
@@ -6392,7 +6392,7 @@
     ],
     "footer": "Lane A: muse-spark-1.3-contributor",
     "tried": "muse-spark-1.3-contributor -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); muse-spark-1.3-contributor via command-code meta/muse-spark-1.3-contributor -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted. Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    },
    "B": {
     "attempts": [
@@ -6423,7 +6423,7 @@
     ],
     "footer": "Lane C: deepseek-v4.1-flash",
     "tried": "deepseek-v4.1-flash -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); deepseek-v4.1-flash via command-code deepseek/deepseek-v4.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the openai plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted; the openai plan quota is exhausted (plan usage limit). Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    }
   }
  },
@@ -6483,7 +6483,7 @@
     ],
     "footer": "Lane A: muse-spark-1.3-contributor",
     "tried": "muse-spark-1.3-contributor -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); muse-spark-1.3-contributor via command-code meta/muse-spark-1.3-contributor -> HTTP 400, command-code credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted. Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    },
    "B": {
     "attempts": [
@@ -6498,7 +6498,7 @@
     ],
     "footer": "Lane B: claude-haiku-5-5",
     "tried": "claude-haiku-5-5 -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); claude-haiku-5-5 via command-code claude-haiku-5-5 -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); claude-haiku-5-5 on anthropic (last resort) -> HTTP 402, anthropic credit balance exhausted (1 attempt(s))",
-    "action": "Action needed: the Anthropic API credit balance is exhausted. Wait for the next credit grant or add credit; another model on the same account cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted; the Anthropic API credit balance is exhausted. Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    },
    "C": {
     "attempts": [
@@ -6514,7 +6514,7 @@
     ],
     "footer": "Lane C: deepseek-v4.1-flash",
     "tried": "deepseek-v4.1-flash -> HTTP 429, opencode-go plan usage limit exhausted (1 attempt(s)); deepseek-v4.1-flash via command-code deepseek/deepseek-v4.1-flash -> HTTP 400, command-code credit balance exhausted (1 attempt(s)); gpt-6.1-sol on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s)); gpt-6-luna on openai (last resort) -> HTTP 429, openai plan usage limit exhausted (1 attempt(s))",
-    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the openai plan quota is exhausted (plan usage limit). This is a plan quota, not a rate limit: retrying before the reset, or another model on the same plan, cannot recover the review."
+    "action": "Action needed: the opencode-go plan quota is exhausted (plan usage limit); the command-code API credit balance is exhausted; the openai plan quota is exhausted (plan usage limit). Wait for the plan quota to reset or add API credit; retrying another model on the same plan or account cannot recover the review."
    }
   }
  },

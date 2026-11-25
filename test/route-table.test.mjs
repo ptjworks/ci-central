@@ -67,7 +67,10 @@ const scenarios = {
   'first-pass-down': { models: { 'claude-sonnet-5-5': 'down', 'gpt-6.2-sol': 'down', 'gpt-6.1-sol': 'down' } },
 };
 const focus = { A: 'Additional focus: state changes', B: 'Additional focus: authorization', C: 'Additional focus: cross-file contracts' };
-const systemOf = (payload) => typeof payload.system === 'string' ? payload.system : (payload.input || payload.messages)?.[0]?.content || '';
+function systemOf(payload) {
+  const content = payload.system ?? payload.input?.[0]?.content ?? payload.messages?.[0]?.content;
+  return Array.isArray(content) ? content.map((block) => block.text).join('\n') : content ?? '';
+}
 
 async function run(config, scenarioName, runnerEnv = { RUNNER_ENVIRONMENT: 'github-hosted' }) {
   const scenario = scenarios[scenarioName];
